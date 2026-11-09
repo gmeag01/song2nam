@@ -327,6 +327,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | ②-0 LLM API | Anthropic Claude(`claude-opus-5-5`) + 웹 검색 도구 |
 | 전체 실행 스크립트 | `ampcap/pipeline.py` (`python -m ampcap.pipeline`) |
 | ③ 중립값 통과 테스트 | 캐비닛 공진은 끌 수 없어 블록별(캐비닛 제외 전체 포함)로 진폭 스펙트럼을 비교 |
+| 데이터 설치 스크립트 | `ampcap/get_data.py` (`python -m ampcap.get_data`). gdown 공개 폴더 목록은 50개까지라 EGDB `audio_DI`(240곡) 목록은 Colab에서 Drive API(Google 로그인)로 받고, 파일은 gdown으로 받는다. NAM 입력은 NAM 코드의 v3.0.0 MD5로 확인 |
 
 ## 5. 데모
 
@@ -419,6 +420,7 @@ ampcap/
   stats.py           ⑥ 통계 4종
   optimize.py        ⑥ 최적화, 후보 선택
   distill.py         ⑦
+  get_data.py        EGDB audio_DI, NAM 표준 입력 내려받기 (4.6 배포)
   evaluate.py        ⑨ 지표와 실험
 app.py               Gradio 데모
 notebooks/           실험과 그래프
