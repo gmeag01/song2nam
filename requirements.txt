@@ -8,6 +8,7 @@ librosa
 demucs
 neural-amp-modeler
 pedalboard
+gdown
 gradio
 matplotlib
 pandas

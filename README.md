@@ -36,7 +36,13 @@ pip install -r requirements.txt
 
 ## 데이터
 
-EGDB 데이터셋을 받아 `data/` 아래에 둡니다. 데이터셋과 음원, 분리된 스템은 저작권과 용량 문제로 저장소에 포함하지 않습니다.
+EGDB DI와 NAM 표준 입력은 공식 Google Drive에서 직접 받습니다. 다시 실행하면 이어 받습니다.
+
+```bash
+python -m ampcap.get_data --data data
+```
+
+240곡 전체 목록은 Colab에서만 받을 수 있습니다(Drive API, Google 로그인). 다른 환경에서는 50곡까지 받고, 나머지는 [EGDB 페이지](https://ss12f32v.github.io/Guitar-Transcription/)의 Drive 링크에서 받으라고 안내합니다. 데이터셋과 음원, 분리된 스템은 저작권과 용량 문제로 저장소에 포함하지 않습니다.
 
 ## 테스트
 
@@ -65,4 +71,4 @@ python app.py
 | `02_song_to_nam.ipynb` | 음원 → .nam 전체 경로, (b) 세션만 경로, Gradio 앱(`--share`) |
 | `03_experiment1.ipynb` | ⑨ 실험 1 합성 되찾기 |
 
-필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 표준 학습 입력, NAM 문서에서 받기). ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.
+필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 표준 학습 입력). 둘 다 `00_setup_and_tests.ipynb`의 0번 셀(`ampcap.get_data`)이 받습니다. ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.
