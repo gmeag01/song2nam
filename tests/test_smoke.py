@@ -19,6 +19,7 @@ MODULES = [
     "ampcap.optimize",
     "ampcap.distill",
     "ampcap.evaluate",
+    "ampcap.pipeline",
 ]
 
 

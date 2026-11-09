@@ -47,5 +47,22 @@ pytest tests/
 ## 실행
 
 ```bash
+# 음원 → .nam 한 번에
+python -m ampcap.pipeline song.wav --session session.json --egdb data/EGDB/audio_DI --nam-input data/nam/v3_0_0.wav
+
+# Gradio 데모
 python app.py
 ```
+
+## Colab
+
+학습과 실험은 Colab GPU에서 돌립니다. `notebooks/`의 노트북은 Drive의 `MyDrive/song2nam/`에 `data/`, `runs/`를 두고 씁니다.
+
+| 노트북 | 내용 |
+|---|---|
+| `00_setup_and_tests.ipynb` | 설치, `pytest tests/`, ⑦ ESR 테스트, EGDB 분할, 대응표 청취 |
+| `01_train_encoder.ipynb` | ④ 합성 데이터로 ⑤ 인코더 학습 (체크포인트 이어 학습) |
+| `02_song_to_nam.ipynb` | 음원 → .nam 전체 경로, (b) 세션만 경로, Gradio 앱(`--share`) |
+| `03_experiment1.ipynb` | ⑨ 실험 1 합성 되찾기 |
+
+필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 표준 학습 입력, NAM 문서에서 받기). ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.
