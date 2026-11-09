@@ -1,0 +1,105 @@
+"""⑥ 최적화: 같은 DI로 만든 가짜 스템에서 θ 복원.
+
+CPU에서도 돌도록 3개 차원만 풀고(나머지는 정답으로 고정) 짧은 클립을 쓴다.
+24차원 전체 복원은 실험 1(Colab GPU)에서 확인한다.
+"""
+
+import json
+
+import numpy as np
+import pytest
+import torch
+
+from ampcap.graybox.amp import INDEX, N_PARAMS, GrayboxAmp, theta_from_units
+from ampcap.optimize import FitConfig, fit, load_theta, save_result
+from ampcap.session import Prior
+
+SR = 48000
+
+
+def _di_clips(n=4, sec=1.0, seed=0):
+    rng = np.random.default_rng(seed)
+    T = int(sec * SR)
+    t = np.arange(T) / SR
+    clips = []
+    for _ in range(n):
+        x = np.zeros(T)
+        for start in rng.uniform(0, sec - 0.3, size=3):
+            f = rng.uniform(90, 250)
+            s = int(start * SR)
+            tt = t[: T - s]
+            note = sum(k ** -1.5 * np.sin(2 * np.pi * k * f * tt) for k in range(1, 30) if k * f < 10000)
+            x[s:] += rng.uniform(0.2, 1.0) * np.exp(-3 * tt) * note
+        clips.append(x / np.sqrt(np.mean(x ** 2)) * 0.05)
+    return torch.tensor(np.stack(clips), dtype=torch.float32)
+
+
+FREE = ["pre1_gain_db", "ts_treble_db", "ts_bass_db"]
+
+
+def _prior_fixing_all_but(theta_true, free):
+    lo = theta_true.double().numpy().copy()
+    hi = lo.copy()
+    for n in free:
+        lo[INDEX[n]], hi[INDEX[n]] = 0.0, 1.0
+    return Prior(lo, hi, (lo + hi) / 2)
+
+
+@pytest.mark.slow
+def test_recovers_theta_from_same_di():
+    torch.manual_seed(0)
+    G = GrayboxAmp()
+    di = _di_clips()
+    theta_true = theta_from_units({"pre1_gain_db": 26.0, "ts_treble_db": 6.0, "ts_bass_db": -5.0,
+                                   "pre2_gain_db": 6.0, "in_gain_db": 0.0})
+    with torch.no_grad():
+        stem = G(di, theta_true.expand(len(di), -1)).reshape(-1)
+    prior = _prior_fixing_all_but(theta_true, FREE)
+
+    cfg = FitConfig(steps=400, lr=0.05, clips_per_step=len(di), n_prior_samples=2,
+                    lambda_prior=0.0, patience=400, eval_clips=len(di))
+    res = fit(stem, di, prior, cfg=cfg, G=G)
+    err = {n: abs(float(res.theta_best[INDEX[n]] - theta_true[INDEX[n]])) for n in FREE}
+    print("θ 복원 오차(0~1):", err, "손실", float(res.losses.min()))
+    assert all(e < 0.08 for e in err.values()), err
+
+
+def test_fit_outputs_and_fixed_dims(tmp_path):
+    di = _di_clips(n=2, sec=0.5)
+    theta_true = theta_from_units({"pre1_gain_db": 20.0})
+    G = GrayboxAmp()
+    with torch.no_grad():
+        stem = G(di, theta_true.expand(2, -1)).reshape(-1)
+    prior = _prior_fixing_all_but(theta_true, ["pre1_gain_db"])
+    res = fit(stem, di, prior, cfg=FitConfig(steps=5, clips_per_step=2, n_prior_samples=2), G=G,
+              theta_hat=np.full(N_PARAMS, 0.5))
+    assert res.thetas.shape == (4, N_PARAMS)        # 중심 + 샘플 2 + 인코더
+    assert res.start_names[-1] == "encoder"
+    fixed = [i for i in range(N_PARAMS) if i != INDEX["pre1_gain_db"]]
+    assert torch.allclose(res.thetas[:, fixed], theta_true[fixed].expand(4, -1), atol=1e-6)
+
+    data = save_result(res, tmp_path, di_pool=di, G=G, n_audio_clips=2)
+    assert (tmp_path / "theta_candidates.json").exists()
+    assert (tmp_path / "loss_curve.png").exists()
+    assert (tmp_path / "candidate_0.wav").exists()
+    d = json.loads((tmp_path / "theta_candidates.json").read_text(encoding="utf-8"))
+    assert len(d["theta_star"]) == N_PARAMS and d["candidates"]
+    assert torch.allclose(load_theta(tmp_path / "theta_candidates.json"), res.theta_best, atol=1e-4)
+    assert "band_diff_db" in data["diagnostics"]
+
+
+def test_nan_triggers_restart(monkeypatch):
+    di = _di_clips(n=2, sec=0.5)
+    G = GrayboxAmp()
+    calls = {"n": 0}
+    orig = G.forward
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        y = orig(*a, **k)
+        return y * float("nan") if calls["n"] == 3 else y
+
+    monkeypatch.setattr(G, "forward", flaky)
+    res = fit(di.reshape(-1), di, Prior.full(), cfg=FitConfig(steps=6, clips_per_step=2, n_prior_samples=0), G=G)
+    assert res.restarts >= 1
+    assert torch.isfinite(res.theta_best).all()

@@ -10,4 +10,6 @@ neural-amp-modeler
 pedalboard
 gradio
 matplotlib
+pandas
+anthropic
 pytest
