@@ -19,11 +19,13 @@ data/*
 *.ogg
 
 # 학습 체크포인트
-checkpoints/
+checkpoints/*
 *.pt
 *.pth
 *.ckpt
 lightning_logs/
+# 배포용 최종 인코더 가중치만 커밋
+!checkpoints/encoder_*_best.pt
 
 # 실행 기록: 시연용은 오디오 외 파일만 git add -f 로 골라서 추가
 runs/*
