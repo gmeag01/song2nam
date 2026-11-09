@@ -162,6 +162,9 @@ def export_nam(model, out_dir: str | Path, name: str, session: dict | None, thet
 def load_nam(path: str | Path):
     """.nam → PyTorch 모듈. NAM 버전마다 경로가 달라 몇 군데를 시도한다."""
     cfg = json.loads(Path(path).read_text(encoding="utf-8"))
+    if cfg.get("architecture") == "SlimmableContainer":
+        # NAM 0.13의 lite 내보내기는 크기별 하위 모델 묶음인데 init_from_nam이 못 읽는다. 가장 큰 모델로 확인.
+        cfg = max(cfg["config"]["submodels"], key=lambda s: s["max_value"])["model"]
     for mod, fn in [("nam.models", "init_from_nam"), ("nam.models._from_nam", "init_from_nam")]:
         try:
             m = __import__(mod, fromlist=[fn])

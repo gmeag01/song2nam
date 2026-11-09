@@ -4,6 +4,7 @@
 AMPCAP_NAM_INPUT(표준 입력 wav 경로)이 있을 때만 돈다(Colab 노트북 00).
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -66,6 +67,21 @@ def test_synth_generator_batch(tmp_path):
     assert b["x"].shape == (3, 3 * SR) and b["theta"].shape == (3, N_PARAMS)
     assert b["session"].shape == (3, 21)
     assert torch.isfinite(b["y"]).all()
+
+
+def test_load_nam_unwraps_slimmable_container(tmp_path):
+    pytest.importorskip("nam")
+    from ampcap.distill import load_nam
+
+    def linear(rf):
+        return {"architecture": "Linear", "config": {"receptive_field": rf, "bias": False},
+                "weights": [0.0] * rf, "sample_rate": 48000}
+
+    cfg = {"architecture": "SlimmableContainer",
+           "config": {"submodels": [{"max_value": 1.0, "model": linear(8)}, {"max_value": 0.5, "model": linear(4)}]}}
+    p = tmp_path / "model.nam"
+    p.write_text(json.dumps(cfg), encoding="utf-8")
+    assert load_nam(p).receptive_field == 8
 
 
 @pytest.mark.skipif(not os.environ.get("AMPCAP_NAM_INPUT"), reason="NAM 표준 입력 파일 필요(Colab)")
