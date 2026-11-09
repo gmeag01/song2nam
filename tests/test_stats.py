@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from ampcap.graybox.amp import GrayboxAmp, theta_from_units
-from ampcap.stats import STAT_KEYS, Stats, brightness, stat_losses
+from ampcap.stats import STAT_KEYS, Stats, stat_losses
 
 SR = 48000
 
@@ -39,13 +39,26 @@ BASE = dict(in_gain_db=-12.0, pre1_gain_db=0.0, pre2_gain_db=0.0, pa_drive_db=0.
             boost_drive_db=0.0, ts_treble_db=0.0, cab_lp_hz=7000.0, pre1_lp_hz=12000.0, pre2_lp_hz=12000.0)
 
 
+def _mel_hz(cfg):
+    m = np.linspace(2595 * np.log10(1 + cfg.f_min / 700), 2595 * np.log10(1 + cfg.f_max / 700), cfg.n_mels + 2)[1:-1]
+    return 700 * (10 ** (m / 2595) - 1)
+
+
 def _level_brightness(theta, x):
+    """레벨 구간별 밝기 = 고역(2.5~7kHz) 평균 − 중저역(200~1000Hz) 평균 (dB).
+
+    기타 성분이 실제로 있는 대역만 본다. 7kHz 위는 캐비닛이 거의 다 깎아서 바닥값에 가깝다.
+    """
     G = GrayboxAmp()
     st = Stats()
     with torch.no_grad():
         y = G(x[None], theta[None])[0]
         s = st(y)
-    return brightness(s["level"][0])  # (4,) 레벨 구간별 밝기
+    hz = _mel_hz(st.cfg)
+    lev = s["level"][0]
+    hi = torch.from_numpy((hz >= 2500) & (hz <= 7000))
+    lo = torch.from_numpy((hz >= 200) & (hz <= 1000))
+    return lev[:, hi].mean(-1) - lev[:, lo].mean(-1)  # (4,)
 
 
 def test_gain_vs_treble_distinguished():

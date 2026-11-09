@@ -18,6 +18,7 @@ from torch import nn
 
 STAT_KEYS = ("ltas", "level", "flat", "dyn")
 EPS = 1e-12
+FLOOR_DB = -100.0  # 신호별 최대 mel 칸 대비 바닥값. 절대 바닥값을 쓰면 음량에 따라 통계가 바뀐다.
 
 
 @dataclass
@@ -58,7 +59,10 @@ class Stats(nn.Module):
                        pad_mode="constant", return_complex=True)
         pw = X.real.square() + X.imag.square()                       # (K, F, L)
         mel = torch.einsum("kfl,fm->kml", pw, self.fb.to(pw.dtype))  # (K, M, L)
-        mel_db = 10 * torch.log10(mel + EPS)
+        # 거의 빈 칸(예: mp3의 16kHz 이상)이 음량과 무관한 상수가 되지 않도록 신호 기준 상대 바닥값을 더한다.
+        floor = mel.detach().amax(dim=(1, 2), keepdim=True) * 10 ** (FLOOR_DB / 10) + EPS
+        mel = mel + floor
+        mel_db = 10 * torch.log10(mel)
 
         xp = torch.nn.functional.pad(x, (c.n_fft // 2, c.n_fft // 2))
         fr = xp.unfold(-1, c.n_fft, c.hop)[:, : mel.shape[-1]]       # (K, L, n_fft)
@@ -122,7 +126,7 @@ class Stats(nn.Module):
         level = level - level.mean(-1, keepdim=True)
 
         # 3. 레벨 구간별 스펙트럼 평탄도 (dB): 기하평균/산술평균
-        flat_frame = db.mean(1) - 10 * torch.log10(pw.mean(1) + EPS)  # (G, P)
+        flat_frame = db.mean(1) - 10 * torch.log10(pw.mean(1))  # (G, P)
         flat = wmean(flat_frame[:, None, :], memb)                    # (G, n_levels)
 
         # 4. 다이내믹
@@ -147,13 +151,6 @@ def stat_losses(pred: dict, target: dict, keys=STAT_KEYS) -> dict[str, torch.Ten
 
 def _feat_dims(k: str) -> int:
     return 2 if k == "level" else 1
-
-
-def brightness(spec: torch.Tensor, split: int | None = None) -> torch.Tensor:
-    """(…, M) 스펙트럼의 고역 절반 평균 − 저역 절반 평균(dB). 테스트·진단용."""
-    M = spec.shape[-1]
-    split = split or M // 2
-    return spec[..., split:].mean(-1) - spec[..., :split].mean(-1)
 
 
 def band_diff_db(pred_ltas: torch.Tensor, target_ltas: torch.Tensor, cfg: StatConfig | None = None,
