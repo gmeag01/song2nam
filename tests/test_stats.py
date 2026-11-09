@@ -128,4 +128,6 @@ def test_silence_is_ignored():
     x = _plucks(repeats=1)
     padded = torch.cat([torch.zeros(SR), x, torch.zeros(SR)])
     a, b = st(x), st(padded)
-    assert torch.allclose(a["ltas"], b["ltas"], atol=0.5)
+    # 무음과 맞닿은 경계 프레임 몇 개가 일부만 소리를 담아 1dB 미만 차이가 난다.
+    # 무음 프레임이 섞였다면 차이는 수십 dB(바닥값 −100dB)가 된다.
+    assert torch.allclose(a["ltas"], b["ltas"], atol=1.0)
