@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# 데이터셋 (EGDB 등) — 저장소에 올리지 않음
+data/*
+!data/.gitkeep
+
+# 오디오 (상업 음원·스템은 저작권 문제로 절대 커밋하지 않음)
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.ogg
+
+# 학습 체크포인트
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+lightning_logs/
+
+# 실행 기록: 시연용은 오디오 외 파일만 git add -f 로 골라서 추가
+runs/*
+!runs/.gitkeep
+
+# 비밀값
+.env
+
+# OS·에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

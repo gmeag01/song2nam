@@ -1,0 +1,13 @@
+# PyTorch는 CUDA 버전에 맞춰 먼저 설치: https://pytorch.org/get-started/locally/
+torch
+torchaudio
+numpy
+scipy
+soundfile
+librosa
+demucs
+neural-amp-modeler
+pedalboard
+gradio
+matplotlib
+pytest
