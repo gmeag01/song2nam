@@ -4,6 +4,7 @@
 AMPCAP_NAM_INPUT(표준 입력 wav 경로)이 있을 때만 돈다(Colab 노트북 00).
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -68,13 +69,35 @@ def test_synth_generator_batch(tmp_path):
     assert torch.isfinite(b["y"]).all()
 
 
+def test_load_nam_unwraps_slimmable_container(tmp_path):
+    pytest.importorskip("nam")
+    from ampcap.distill import load_nam
+
+    def linear(rf):
+        return {"architecture": "Linear", "config": {"receptive_field": rf, "bias": False},
+                "weights": [0.0] * rf, "sample_rate": 48000}
+
+    cfg = {"architecture": "SlimmableContainer",
+           "config": {"submodels": [{"max_value": 1.0, "model": linear(8)}, {"max_value": 0.5, "model": linear(4)}]}}
+    p = tmp_path / "model.nam"
+    p.write_text(json.dumps(cfg), encoding="utf-8")
+    assert load_nam(p).receptive_field == 8
+
+
+EGDB_DI = os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI")
+
+
 @pytest.mark.skipif(not os.environ.get("AMPCAP_NAM_INPUT"), reason="NAM 표준 입력 파일 필요(Colab)")
 def test_distill_esr_on_unused_di(tmp_path):
+    """설계 4.5: ⑦ 확인용 DI는 EGDB test 분할. 백색 잡음은 기타 DI와 분포가 달라 ESR이 3배쯤 나쁘게 나온다."""
     from ampcap.distill import distill
+    from ampcap.synth_data import di_reader_for_split, normalize_di
 
-    rng = np.random.default_rng(1)
+    if not list(Path(EGDB_DI).glob("*.wav")):
+        pytest.skip("EGDB DI 필요 (python -m ampcap.get_data)")
     th = theta_from_units({"pre1_gain_db": 24.0, "ts_mid_db": 4.0})
-    di = [(rng.standard_normal(SR * 3) * 0.05).astype(np.float32) for _ in range(2)]
+    reader = di_reader_for_split(EGDB_DI, "test", tmp_path / "split.json")
+    di = list(normalize_di(reader.fixed_clips(4, seed=1)))
     out = distill(th, tmp_path, Path(os.environ["AMPCAP_NAM_INPUT"]), 0.05, name="test",
                   epochs=int(os.environ.get("AMPCAP_NAM_EPOCHS", "30")), architecture="lite", verify_di=di)
     print(out["verify"])
