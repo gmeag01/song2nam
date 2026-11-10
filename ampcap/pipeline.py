@@ -1,7 +1,7 @@
 """음원 → .nam 전체 실행 (설계 문서 8장 "전체 실행 스크립트").
 
     python -m ampcap.pipeline song.wav --session session.json --egdb data/EGDB/audio_DI \
-        --nam-input data/nam/v3_0_0.wav [--segments 42:58.5,131.2:140] [--encoder runs/encoder/encoder_best.pt]
+        --nam-input data/nam/v3_0_0.wav [--segments 42:58.5,131.2:140] [--encoder checkpoints/encoder_v1_best.pt]
 
 각 단계 결과는 runs/<날짜_곡명>/에 파일로 남기고, 다음 단계는 그 파일을 읽는다.
 --session-only를 주면 (b) 경로: 사전분포 중심값을 θ로 쓰고 ⑤⑥을 건너뛴다.
@@ -19,6 +19,7 @@ import numpy as np
 import torch
 
 from . import separate, session as sess_mod
+from .encoder import BEST_PATH
 from .optimize import FitConfig, fit, load_theta, save_result
 from .synth_data import DI_REF_RMS, di_reader_for_split, normalize_di
 
@@ -67,11 +68,11 @@ def step_session(session_path, run_dir) -> tuple[dict, sess_mod.Prior]:
 
 
 def step_encoder(encoder_path, stem, session, device) -> np.ndarray | None:
-    if not encoder_path:
-        return None
     from . import encoder as enc
 
-    model = enc.load(encoder_path, device)
+    model = enc.try_load(encoder_path, device)
+    if model is None:
+        return None
     return enc.predict_song(model, stem, sess_mod.session_vector(session))
 
 
@@ -92,7 +93,7 @@ def main(argv=None):
     ap.add_argument("--egdb", required=True, help="EGDB DI 폴더")
     ap.add_argument("--split-file", default="data/egdb_split.json")
     ap.add_argument("--nam-input", default="data/nam/v3_0_0.wav")
-    ap.add_argument("--encoder", default=None)
+    ap.add_argument("--encoder", default=str(BEST_PATH), help="'' 이면 인코더 없이")
     ap.add_argument("--run-dir", default=None)
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--epochs", type=int, default=100)

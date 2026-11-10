@@ -64,14 +64,16 @@ def test_full_amp_passes_with_cab_bypassed():
 
 
 def test_batch_and_shapes():
+    torch.manual_seed(0)
     G = GrayboxAmp()
     x = torch.randn(3, 9600) * 0.05
     th = torch.rand(3, N_PARAMS)
     y = G(x, th)
     assert y.shape == x.shape and torch.isfinite(y).all()
-    # 배치 안의 각 예시는 독립
+    # 배치 안의 각 예시는 독립. float32 FFT는 배치 크기에 따라 계산 순서가 달라 1e-5 수준 차이가 난다
+    # (배치끼리 섞이면 차이는 신호 크기만큼 난다).
     y1 = G(x[1:2], th[1:2])
-    assert torch.allclose(y[1:2], y1, atol=1e-5)
+    assert torch.allclose(y[1:2], y1, atol=1e-4)
 
 
 def test_target_rms_normalization():

@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from .graybox.amp import N_PARAMS, GrayboxAmp, rms
+from .graybox.amp import N_PARAMS, THETA_VERSION, GrayboxAmp, rms
 from .session import SESSION_DIM
 from .stats import mel_filterbank
 
@@ -125,11 +125,12 @@ class TrainConfig:
 
 
 def train(model: Encoder, train_gen, val_gen=None, cfg: TrainConfig | None = None,
-          ckpt_path: str | Path = "runs/encoder/encoder.pt", device: str = "cuda",
+          ckpt_path: str | Path | None = None, device: str = "cuda",
           resume: bool = True, log=print) -> dict:
     """합성 데이터 생성기로 인코더를 학습한다. Colab 세션이 끊겨도 체크포인트에서 이어 간다."""
     cfg = cfg or TrainConfig()
-    ckpt_path = Path(ckpt_path)
+    ckpt_path = Path(ckpt_path or default_ckpt_path())
+    best_path = ckpt_path.with_name(BEST_PATH.name)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
     model = model.to(device)
     G = GrayboxAmp().to(device)
@@ -138,6 +139,7 @@ def train(model: Encoder, train_gen, val_gen=None, cfg: TrainConfig | None = Non
     start, history = 0, []
     if resume and ckpt_path.exists():
         ck = torch.load(ckpt_path, map_location=device)
+        _check_version(ck, ckpt_path)
         model.load_state_dict(ck["model"])
         opt.load_state_dict(ck["opt"])
         sched.load_state_dict(ck["sched"])
@@ -167,16 +169,12 @@ def train(model: Encoder, train_gen, val_gen=None, cfg: TrainConfig | None = Non
             log(f"val theta_mse {v:.5f}")
             if v < best_val:
                 best_val = v
-                save(model, ckpt_path.with_name(ckpt_path.stem + "_best.pt"))
+                save(model, best_path, val=v)
         if (step + 1) % cfg.ckpt_every == 0 or step + 1 == cfg.steps:
-            torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                        "sched": sched.state_dict(), "step": step + 1, "history": history,
-                        "config": asdict(model.cfg)}, ckpt_path)
+            _save_full(model, opt, sched, step + 1, history, best_val, ckpt_path)
         if (time.time() - t0) / 3600 > cfg.max_hours:
             log("시간 한도 도달, 저장 후 종료")
-            torch.save({"model": model.state_dict(), "opt": opt.state_dict(),
-                        "sched": sched.state_dict(), "step": step + 1, "history": history,
-                        "config": asdict(model.cfg)}, ckpt_path)
+            _save_full(model, opt, sched, step + 1, history, best_val, ckpt_path)
             break
     return {"history": history, "best_val": best_val}
 
@@ -191,19 +189,60 @@ def evaluate(model: Encoder, gen, n_batches: int = 8) -> float:
     return float(np.mean(vals))
 
 
-def save(model: Encoder, path: str | Path):
+# ---------------------------------------------------------------- 체크포인트 (설계 문서 4.6)
+
+BEST_PATH = Path("checkpoints") / f"encoder_v{THETA_VERSION}_best.pt"   # 저장소에 커밋하는 최종본
+
+
+class ThetaVersionError(ValueError):
+    """체크포인트의 θ 버전이 지금 G와 다르다. 인코더 없이 사전분포 시작점으로 진행한다."""
+
+
+def default_ckpt_path(day: str | None = None) -> Path:
+    return Path("checkpoints") / f"encoder_v{THETA_VERSION}_{day or time.strftime('%Y%m%d')}.pt"
+
+
+def _check_version(ck: dict, path) -> None:
+    v = ck.get("theta_version")
+    if v != THETA_VERSION:
+        raise ThetaVersionError(f"{path}: θ 버전 {v}, 지금 G는 {THETA_VERSION}. 이 인코더는 쓸 수 없습니다.")
+
+
+def _save_full(model, opt, sched, step, history, best_val, path):
+    torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
+                "step": step, "history": history, "config": asdict(model.cfg),
+                "theta_version": THETA_VERSION, "val_loss": best_val}, path)
+
+
+def save(model: Encoder, path: str | Path, val: float | None = None):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"model": model.state_dict(), "config": asdict(model.cfg)}, path)
+    torch.save({"model": model.state_dict(), "config": asdict(model.cfg),
+                "theta_version": THETA_VERSION, "val_loss": val}, path)
 
 
 def load(path: str | Path, device: str = "cpu") -> Encoder:
     ck = torch.load(path, map_location=device)
+    _check_version(ck, path)
     model = Encoder(EncoderConfig(**ck["config"]))
     model.load_state_dict(ck["model"])
     return model.to(device).eval()
 
 
 # ---------------------------------------------------------------- 실제 곡
+
+
+def try_load(path: str | Path | None, device: str = "cpu", log=print) -> Encoder | None:
+    """앱·파이프라인용: 파일이 없거나 θ 버전이 다르면 경고하고 None (사전분포 시작점으로 진행)."""
+    if not path:
+        return None
+    if not Path(path).exists():
+        log(f"경고: 인코더 {path}가 없습니다. 인코더 없이 진행합니다.")
+        return None
+    try:
+        return load(path, device)
+    except ThetaVersionError as e:
+        log(f"경고: {e} 인코더 없이 진행합니다.")
+        return None
 
 
 @torch.no_grad()

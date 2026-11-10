@@ -20,13 +20,14 @@ import torch
 
 from ampcap import separate
 from ampcap import session as sess_mod
+from ampcap.encoder import BEST_PATH
 from ampcap.graybox.amp import BLOCKS, NAMES, GrayboxAmp
 from ampcap.pipeline import load_di_pool, make_run_dir
 from ampcap.synth_data import DI_REF_RMS, di_reader_for_split, normalize_di
 
 ARGS = argparse.Namespace(egdb=os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI"),
                           nam_input=os.environ.get("AMPCAP_NAM_INPUT", "data/nam/v3_0_0.wav"),
-                          encoder=os.environ.get("AMPCAP_ENCODER"), split_file="data/egdb_split.json")
+                          encoder=os.environ.get("AMPCAP_ENCODER", str(BEST_PATH)), split_file="data/egdb_split.json")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -207,10 +208,11 @@ def find_tone(steps, state):
     stem = separate.load_audio(rd / "stem.wav", mono=True)
     pool = torch.from_numpy(load_di_pool(ARGS.egdb, split_file=ARGS.split_file)).to(DEVICE)
     theta_hat = None
-    if ARGS.encoder:
-        from ampcap import encoder as enc
+    from ampcap import encoder as enc
 
-        theta_hat = enc.predict_song(enc.load(ARGS.encoder, DEVICE), stem, sess_mod.session_vector(s))
+    model = enc.try_load(ARGS.encoder, DEVICE)
+    if model is not None:
+        theta_hat = enc.predict_song(model, stem, sess_mod.session_vector(s))
 
     curve = []
     import queue

@@ -328,6 +328,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | 전체 실행 스크립트 | `ampcap/pipeline.py` (`python -m ampcap.pipeline`) |
 | ③ 중립값 통과 테스트 | 캐비닛 공진은 끌 수 없어 블록별(캐비닛 제외 전체 포함)로 진폭 스펙트럼을 비교 |
 | 데이터 설치 스크립트 | `ampcap/get_data.py` (`python -m ampcap.get_data`). gdown 공개 폴더 목록은 50개까지라 EGDB `audio_DI`(240곡) 목록은 Colab에서 Drive API(Google 로그인)로 받고, 파일은 gdown으로 받는다. NAM 입력은 NAM 코드의 v3.0.0 MD5로 확인 |
+| 인코더 체크포인트 | θ 버전은 `graybox/amp.py`의 `THETA_VERSION`(현재 1). 학습 중 파일은 `encoder_v1_<시작 날짜>.pt`, 최고 모델은 날짜 없이 `encoder_v1_best.pt`. Colab은 Drive `checkpoints/`에 저장하고, 01 노트북은 같은 θ 버전의 가장 최근 파일에서 이어 학습한다. 파이프라인·앱의 기본 인코더는 저장소의 `checkpoints/encoder_v1_best.pt` |
 
 ## 5. 데모
 
