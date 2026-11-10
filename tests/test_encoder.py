@@ -69,3 +69,21 @@ def test_predict_song_and_save_load(tmp_path):
     m2 = load(tmp_path / "enc.pt")
     th2 = predict_song(m2, stem, np.zeros(SESSION_DIM, np.float32))
     np.testing.assert_allclose(th, th2, atol=1e-5)
+
+
+def test_theta_version_mismatch_falls_back_to_no_encoder(tmp_path, monkeypatch):
+    """설계 4.6: θ 버전이 다른 체크포인트는 오류, 앱·파이프라인은 인코더 없이 진행."""
+    import pytest
+
+    from ampcap import encoder as E
+
+    p = tmp_path / "enc.pt"
+    save(_small(), p, val=0.1)
+    assert torch.load(p)["theta_version"] == E.THETA_VERSION
+    monkeypatch.setattr(E, "THETA_VERSION", E.THETA_VERSION + 1)
+    with pytest.raises(E.ThetaVersionError):
+        load(p)
+    msgs = []
+    assert E.try_load(p, log=msgs.append) is None and "θ 버전" in msgs[0]
+    assert E.try_load(tmp_path / "none.pt", log=msgs.append) is None and "없습니다" in msgs[1]
+    assert E.try_load(None) is None
