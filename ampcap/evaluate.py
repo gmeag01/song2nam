@@ -83,7 +83,7 @@ def fad_mel(pred_audio, target_audio, stats: Stats | None = None) -> float:
     ft = ft - ft.mean(1, keepdims=True)
     mu1, mu2 = fp.mean(0), ft.mean(0)
     s1, s2 = np.cov(fp, rowvar=False), np.cov(ft, rowvar=False)
-    covmean, _ = linalg.sqrtm(s1 @ s2, disp=False)
+    covmean = linalg.sqrtm(s1 @ s2)  # scipy 1.18에서 disp 인자 삭제됨
     covmean = covmean.real
     return float(((mu1 - mu2) ** 2).sum() + np.trace(s1 + s2 - 2 * covmean))
 
