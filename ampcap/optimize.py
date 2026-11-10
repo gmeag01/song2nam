@@ -122,7 +122,8 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
     def losses_for(th, clips, norm=None):
         n = clips.shape[0]
         x = clips[None].expand(S, -1, -1).reshape(S * n, -1)
-        y = G(x, th.repeat_interleave(n, 0), mode="fft").reshape(S, n, -1)
+        # ⑦ 렌더링(96kHz)과 같은 앨리어싱 조건에서 맞춘다(설계 4.4 구현 결정 5)
+        y = G(x, th.repeat_interleave(n, 0), mode="fft", oversample=True).reshape(S, n, -1)
         st = stats(y)
         ls = stat_losses(st, tgt, stat_keys)
         terms = torch.stack([ls[k] for k in stat_keys], -1)       # (S, K)
