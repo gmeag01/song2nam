@@ -110,3 +110,23 @@ def test_full_amp_render_deterministic():
     x = torch.randn(1, 4800) * 0.05
     th = torch.rand(N_PARAMS)
     assert torch.allclose(G.render(x, th), G.render(x, th))
+
+
+def test_exp1_resume_after_truncated_line(tmp_path, monkeypatch):
+    """세션이 쓰는 도중 끊겨 마지막 줄이 반쯤 남아도 이어서 돌릴 수 있어야 한다."""
+    from ampcap import evaluate as E
+
+    res = tmp_path / "exp1_results.jsonl"
+    ok = {"song": 0, "start": "center", "stats": "all4", "session": "none", "esr": 0.1}
+    res.write_text(json.dumps(ok) + "\n" + '{"song": 1, "start": "mul', encoding="utf-8")
+    assert E.read_results(res) == [ok]
+
+    class Pool:
+        def fixed_clips(self, n, seed):
+            return np.zeros((n, 4800), np.float32)
+
+    monkeypatch.setattr(E, "make_fake_songs", lambda *a, **k: [])
+    E.run_experiment1(None, Pool(), tmp_path, device="cpu")
+    with res.open("a", encoding="utf-8") as f:  # 재개 뒤 새 결과
+        f.write(json.dumps({**ok, "song": 2}) + "\n")
+    assert [r["song"] for r in E.read_results(res)] == [0, 2]
