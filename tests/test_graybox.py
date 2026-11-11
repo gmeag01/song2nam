@@ -1,4 +1,4 @@
-"""③ G: 블록 중립값 통과, gradcheck, 주파수 영역 vs lfilter, 처리 속도."""
+"""③ G: 블록 중립 θ 통과, gradcheck, 주파수 샘플링 방식 vs lfilter, 처리 속도."""
 
 import time
 
@@ -38,7 +38,7 @@ def test_param_table_roundtrip():
 
 
 def test_linear_blocks_pass_at_neutral():
-    """EQ 블록(입력단, 톤스택, 프레즌스 제외 파워앰프의 선형부)은 중립값에서 평탄."""
+    """EQ 블록(입력단, 톤스택, 프레즌스 제외 파워앰프의 선형부)은 중립 θ에서 평탄."""
     p = denormalize(neutral_theta().double()[None])
     x = _tone(amp=0.3)
     y = blocks.tonestack(x, p, SR, "fft")
@@ -48,7 +48,7 @@ def test_linear_blocks_pass_at_neutral():
 
 
 def test_nonlinear_blocks_pass_small_signal_at_neutral():
-    """드라이브 0dB·비대칭 0에서 작은 신호는 부스터·프리앰프·파워앰프를 거의 그대로 통과."""
+    """드라이브 0dB·비대칭 0에서 작은 신호는 부스트·프리앰프·파워앰프를 거의 그대로 통과."""
     p = denormalize(neutral_theta().double()[None])
     x = _tone(amp=1e-3)
     for name in ["boost", "preamp", "power"]:

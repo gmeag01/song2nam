@@ -1,10 +1,10 @@
-"""⑤ 파라미터 인코더.
+"""⑤ 파라미터 추정 인코더.
 
 스템 3초 → log-Mel(128) → CNN → Global Pooling → 오디오 벡터
 [오디오 벡터 ; 세션 벡터(21)] → MLP → sigmoid → θ̂ (24)
 
 손실: θ MSE + MR-STFT(G(x; θ̂) vs y). 실제 곡은 3초 창 여러 개의 θ̂ 중앙값.
-인코더는 ⑥의 시작점과 정규화 기준이며, 없어도 파이프라인은 동작한다.
+인코더는 ⑥의 시작점이자 정칙화 기준점(λ_enc 항)이며, 없어도 파이프라인은 동작한다.
 """
 
 from __future__ import annotations
@@ -121,13 +121,13 @@ class TrainConfig:
     val_every: int = 500
     val_batches: int = 8
     ckpt_every: int = 1000
-    max_hours: float = 4.0        # Colab 세션 한도 대비
+    max_hours: float = 4.0        # Colab 런타임 한도 대비
 
 
 def train(model: Encoder, train_gen, val_gen=None, cfg: TrainConfig | None = None,
           ckpt_path: str | Path | None = None, device: str = "cuda",
           resume: bool = True, log=print) -> dict:
-    """합성 데이터 생성기로 인코더를 학습한다. Colab 세션이 끊겨도 체크포인트에서 이어 간다."""
+    """합성 데이터 생성기로 인코더를 학습한다. Colab 런타임이 끊겨도 체크포인트에서 이어 간다."""
     cfg = cfg or TrainConfig()
     ckpt_path = Path(ckpt_path or default_ckpt_path())
     best_path = ckpt_path.with_name(BEST_PATH.name)
@@ -195,7 +195,7 @@ BEST_PATH = Path("checkpoints") / f"encoder_v{THETA_VERSION}_best.pt"   # 저장
 
 
 class ThetaVersionError(ValueError):
-    """체크포인트의 θ 버전이 지금 G와 다르다. 인코더 없이 사전 범위 시작점으로 진행한다."""
+    """체크포인트의 θ 버전이 지금 G와 다르다. 인코더 없이 시작점 prior_center·prior_sample_i만으로 진행한다."""
 
 
 def default_ckpt_path(day: str | None = None) -> Path:
@@ -232,7 +232,7 @@ def load(path: str | Path, device: str = "cpu") -> Encoder:
 
 
 def try_load(path: str | Path | None, device: str = "cpu", log=print) -> Encoder | None:
-    """앱·파이프라인용: 파일이 없거나 θ 버전이 다르면 경고하고 None (사전 범위 시작점으로 진행)."""
+    """앱·파이프라인용: 파일이 없거나 θ 버전이 다르면 경고하고 None (시작점 prior_center·prior_sample_i만으로 진행)."""
     if not path:
         return None
     if not Path(path).exists():

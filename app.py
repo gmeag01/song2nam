@@ -29,6 +29,7 @@ ARGS = argparse.Namespace(egdb=os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI
                           nam_input=os.environ.get("AMPCAP_NAM_INPUT", "data/nam/v3_0_0.wav"),
                           encoder=os.environ.get("AMPCAP_ENCODER", str(BEST_PATH)), split_file="data/egdb_split.json")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+SCOPE_KO = {"song": "곡 단위 장비", "usual": "평소 장비"}  # ②-0 출처 범위 표시
 
 
 # ---------------------------------------------------------------- 그림
@@ -46,7 +47,7 @@ def fig_waveform(stem: np.ndarray, sr: int, segments, recommended):
         ax.axvspan(a, b, color="#4caf50", alpha=0.2)
     for a, b in segments or []:
         ax.axvspan(a, b, color="#2196f3", alpha=0.35)
-    ax.set_xlabel("초 (초록: 추천, 파랑: 선택)")
+    ax.set_xlabel("초 (초록: 추천 구간, 파랑: 선택 구간)")
     ax.set_yticks([])
     fig.tight_layout()
     return fig
@@ -136,7 +137,7 @@ def check_segments(target, same_rig, state):
     stem = _stem(state)
     mono, rep = separate.check_and_build(stem, state["segments"], song=state["song"], same_rig=same_rig)
     separate.save_outputs(state["run_dir"], mono, rep)
-    msgs = [separate.GUIDANCE[target], f"연주 길이(무음 제외): {rep.active_sec:.1f}초"]
+    msgs = [separate.GUIDANCE[target], f"유효 연주 길이(무음 제외): {rep.active_sec:.1f}초"]
     if rep.message:
         msgs.append("⛔ " + rep.message)
     mg = separate.multi_guitar_message(rep.warnings)
@@ -166,9 +167,9 @@ def llm_research(link_or_title, state):
     f = draft["fields"]
     lines = [f"{artist} — {song}"]
     for k, v in f.items():
-        lines.append(f"- {k}: {v['value']} (확신도 {v['confidence']:.2f}, {v['scope']}) {v['source'] or ''}")
+        lines.append(f"- {k}: {v['value']} (확신도 {v['confidence']:.2f}, {SCOPE_KO.get(v['scope'], v['scope'])}) {v['source'] or ''}")
     if draft.get("problems"):
-        lines.append("검증 문제: " + "; ".join(draft["problems"]))
+        lines.append("스키마 검증 문제: " + "; ".join(draft["problems"]))
     vals = [f[k]["value"] for k in ("guitar.pickup", "amp.family", "amp.gain", "cab.size", "boost")]
     return "\n".join(lines), *vals, f["amp.model"]["value"], state
 
@@ -244,7 +245,7 @@ def find_tone(steps, state):
     res = box["res"]
     save_result(res, rd, di_pool=pool.cpu(), target_rms=float(np.sqrt(np.mean(stem ** 2))))
     cands = [str(rd / f"candidate_{k}.wav") for k in range(len(res.candidates))]
-    diag = "\n".join(res.diagnostics["messages"]) or "통계 잔여 차이 작음"
+    diag = "\n".join(res.diagnostics["messages"]) or "대역별 잔차 모두 2 dB 미만"
     state["n_candidates"] = len(cands)
     yield (fig_curve(res.curve), fig_theta(res.theta_star), cands[0] if cands else None,
            cands[1] if len(cands) > 1 else None, f"θ* 손실 {float(res.losses.min()):.4f}\n{diag}", state)
@@ -304,7 +305,7 @@ def build():
 
         with gr.Tab("2. 구간 선택 (①)"):
             target = gr.Radio(["rhythm", "lead"], value="rhythm", label="capture_target")
-            same_rig = gr.Checkbox(True, label="same_rig (여러 기타가 같은 장비)")
+            same_rig = gr.Checkbox(True, label="same_rig (모든 기타 트랙이 같은 기타·앰프 구성)")
             with gr.Row():
                 seg_s = gr.Number(label="시작(초)")
                 seg_e = gr.Number(label="끝(초)")
@@ -351,7 +352,7 @@ def build():
             nam_file = gr.File(label="model.nam")
             nam_msg = gr.Textbox(label="입력 레벨·검증(ESR)", lines=8)
             gr.Markdown("생성된 .nam에는 캐비닛이 포함됩니다. NAM 플러그인의 IR 로더를 끄고, "
-                        "DI 트랙 게인은 input_level의 기준에 맞추세요.")
+                        "DI 트랙의 연주 RMS를 input_level.json의 di_ref_rms_dbfs에 맞추세요.")
 
         load_btn.click(load_run, [run_in, state], [load_msg, theta_fig, state])
         sep_btn.click(do_separate, [audio, song_name, state], [wave, stem_audio, rec_txt, state, sep_msg])

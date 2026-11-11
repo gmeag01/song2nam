@@ -51,7 +51,7 @@ def load_di_pool(egdb_di_dir, n_clips: int = 48, split_file=None, seed: int = 0,
 
 def step_separate(audio_path, run_dir, segments=None, song="", same_rig=True, device=None):
     _, rep = separate.run(audio_path, run_dir, segments, song=song, same_rig=same_rig, device=device)
-    print("① 구간:", rep.segments, "연주", rep.active_sec, "초", rep.warnings)
+    print("① 구간:", rep.segments, "유효 연주 길이", rep.active_sec, "초", rep.warnings)
     if not rep.ok:
         raise SystemExit(rep.message)
 
@@ -98,7 +98,7 @@ def main(argv=None):
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--architecture", default="standard")
-    ap.add_argument("--session-only", action="store_true", help="(b) 세션 정보만으로 θ")
+    ap.add_argument("--session-only", action="store_true", help="(b) 세션만 경로: 사전 범위 중심을 θ로 쓰고 ⑤⑥을 건너뜀")
     ap.add_argument("--skip-distill", action="store_true")
     ap.add_argument("--device", default=None)
     a = ap.parse_args(argv)

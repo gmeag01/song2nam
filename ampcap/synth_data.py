@@ -28,7 +28,7 @@ SR = 48000
 CLIP_SEC = 3.0
 SPLITS = ("train", "val", "pool", "test")
 SPLIT_RATIOS = (0.7, 0.1, 0.1, 0.1)
-# DI 기준 음량. ④·⑥·⑦ 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력 게인 θ의 기준점).
+# DI 기준 음량. ④·⑥·⑦ 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력단 게인 θ in_gain_db의 기준점).
 DI_REF_RMS = 0.05
 
 
@@ -134,7 +134,7 @@ def di_reader_for_split(di_dir, split_name: str, split_file=None, **kw) -> DIRea
 
 
 def augment_mix(y: np.ndarray, rng: np.random.Generator, sr: int = SR) -> np.ndarray:
-    """믹스 처리 흉내: 무작위 EQ, 컴프, 짧은 리버브 (pedalboard). 없으면 원본 그대로."""
+    """믹스 처리 증강: 무작위 EQ, 컴프, 짧은 리버브 (pedalboard). 없으면 원본 그대로."""
     try:
         import pedalboard as pb
     except ImportError:
@@ -172,7 +172,7 @@ class SynthConfig:
 
 
 class SynthGenerator:
-    """배치 단위로 (DI x, 깨끗한 렌더 y, 증강된 y_aug, θ, 세션 벡터)를 만든다."""
+    """배치 단위로 (DI x, 증강 전 렌더 y, 증강된 y_aug, θ, 세션 벡터)를 만든다."""
 
     def __init__(self, reader: DIReader, device: str | torch.device = "cpu",
                  cfg: SynthConfig | None = None, seed: int = 0, G: GrayboxAmp | None = None):
