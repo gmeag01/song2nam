@@ -1,7 +1,9 @@
-"""⑥ 곡별 미세조정 최적화, 후보 선택.
+"""⑥ 곡별 파라미터 최적화(inference-time optimization), 후보 선택.
+
+네트워크 가중치는 바꾸지 않고 θ만 곡마다 최적화한다.
 
 L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템)) / (시작점 손실)
-     + λ_prior · (사전분포 범위를 벗어난 거리)²
+     + λ_prior · (사전 범위를 벗어난 거리)²
      + λ_enc · ‖θ − θ̂‖²
 
 θ = sigmoid(u), u를 Adam으로 최적화한다. 시작점 여러 개를 한 배치로 병렬 최적화한다.
@@ -42,7 +44,7 @@ class FitConfig:
 
 @dataclass
 class FitResult:
-    theta_best: torch.Tensor           # (24,)
+    theta_star: torch.Tensor           # (24,) θ* = 후보 0
     thetas: torch.Tensor               # (S, 24) 시작점별 최종 θ
     losses: torch.Tensor               # (S,) 고정 클립 평가 손실
     start_names: list[str]
@@ -208,7 +210,7 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         "prior_violation": float(prior_penalty(th_final[best], lo, hi)),
         "steps": step, "lr_final": lr,
     }
-    return FitResult(theta_best=th_final[best].cpu(), thetas=th_final.cpu(), losses=total.cpu(),
+    return FitResult(theta_star=th_final[best].cpu(), thetas=th_final.cpu(), losses=total.cpu(),
                      start_names=start_names, curve=curve, candidates=cands,
                      diagnostics=diagnostics, restarts=restarts)
 
@@ -230,8 +232,8 @@ def save_result(res: FitResult, run_dir: str | Path, di_pool: torch.Tensor | Non
         })
     data = {
         "names": NAMES,
-        "theta_star": [round(float(v), 5) for v in res.theta_best],
-        "theta_star_units": theta_to_units_dict(res.theta_best),
+        "theta_star": [round(float(v), 5) for v in res.theta_star],
+        "theta_star_units": theta_to_units_dict(res.theta_star),
         "candidates": cands,
         "all_starts": [{"start": n, "loss": float(l)} for n, l in zip(res.start_names, res.losses)],
         "diagnostics": res.diagnostics, "restarts": res.restarts,

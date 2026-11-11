@@ -94,7 +94,7 @@ def mrstft(pred: torch.Tensor, target: torch.Tensor,
 
 def encoder_loss(model: Encoder, batch: dict, G: GrayboxAmp | None = None,
                  w_mrstft: float = 0.1, target_rms: float = 0.1):
-    th_hat = model(batch["y_aug"], batch["session"])
+    th_hat = model(batch["y_aug"], batch["session_vec"])
     l_theta = (th_hat - batch["theta"]).square().mean()
     out = {"theta_mse": l_theta}
     total = l_theta
@@ -185,7 +185,7 @@ def evaluate(model: Encoder, gen, n_batches: int = 8) -> float:
     vals = []
     for _ in range(n_batches):
         b = gen.next_batch()
-        vals.append(float((model(b["y_aug"], b["session"]) - b["theta"]).square().mean()))
+        vals.append(float((model(b["y_aug"], b["session_vec"]) - b["theta"]).square().mean()))
     return float(np.mean(vals))
 
 
@@ -195,7 +195,7 @@ BEST_PATH = Path("checkpoints") / f"encoder_v{THETA_VERSION}_best.pt"   # 저장
 
 
 class ThetaVersionError(ValueError):
-    """체크포인트의 θ 버전이 지금 G와 다르다. 인코더 없이 사전분포 시작점으로 진행한다."""
+    """체크포인트의 θ 버전이 지금 G와 다르다. 인코더 없이 사전 범위 시작점으로 진행한다."""
 
 
 def default_ckpt_path(day: str | None = None) -> Path:
@@ -232,7 +232,7 @@ def load(path: str | Path, device: str = "cpu") -> Encoder:
 
 
 def try_load(path: str | Path | None, device: str = "cpu", log=print) -> Encoder | None:
-    """앱·파이프라인용: 파일이 없거나 θ 버전이 다르면 경고하고 None (사전분포 시작점으로 진행)."""
+    """앱·파이프라인용: 파일이 없거나 θ 버전이 다르면 경고하고 None (사전 범위 시작점으로 진행)."""
     if not path:
         return None
     if not Path(path).exists():

@@ -1,7 +1,7 @@
 """⑦ 증류·⑨ 평가·④ 합성 데이터.
 
 ⑦ ESR 테스트(미사용 DI로 G와 .nam 비교, 목표 0.01 미만)는 NAM 학습이 필요해서
-AMPCAP_NAM_INPUT(표준 입력 wav 경로)이 있을 때만 돈다(Colab 노트북 00).
+AMPCAP_NAM_INPUT(NAM 학습 입력 신호 wav 경로)이 있을 때만 돈다(Colab 노트북 00).
 """
 
 import json
@@ -17,6 +17,17 @@ from ampcap.graybox.amp import N_PARAMS, GrayboxAmp, theta_from_units
 from ampcap.separate import save_wav
 
 SR = 48000
+
+
+def test_gear_type_follows_boost():
+    pytest.importorskip("nam.models.metadata")
+    from nam.models.metadata import GearType
+
+    from ampcap.distill import gear_type_for
+
+    assert gear_type_for({"boost": "tube_screamer"}) == GearType.AMP_PEDAL_CAB
+    assert gear_type_for({"boost": "none"}) == GearType.AMP_CAB
+    assert gear_type_for(None) == GearType.AMP_CAB
 
 
 def test_metrics_basic():
@@ -65,7 +76,7 @@ def test_synth_generator_batch(tmp_path):
     gen = SynthGenerator(reader, cfg=SynthConfig(batch_size=3, augment=False))
     b = gen.next_batch()
     assert b["x"].shape == (3, 3 * SR) and b["theta"].shape == (3, N_PARAMS)
-    assert b["session"].shape == (3, 21)
+    assert b["session_vec"].shape == (3, 21)
     assert torch.isfinite(b["y"]).all()
 
 
@@ -87,7 +98,7 @@ def test_load_nam_unwraps_slimmable_container(tmp_path):
 EGDB_DI = os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI")
 
 
-@pytest.mark.skipif(not os.environ.get("AMPCAP_NAM_INPUT"), reason="NAM 표준 입력 파일 필요(Colab)")
+@pytest.mark.skipif(not os.environ.get("AMPCAP_NAM_INPUT"), reason="NAM 학습 입력 신호 파일 필요(Colab)")
 def test_distill_esr_on_unused_di(tmp_path):
     """설계 4.5: ⑦ 확인용 DI는 EGDB test 분할. 백색 잡음은 기타 DI와 분포가 달라 ESR이 3배쯤 나쁘게 나온다."""
     from ampcap.distill import distill

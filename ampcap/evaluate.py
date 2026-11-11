@@ -153,12 +153,16 @@ class Exp1Config:
     eval_clips: int = 4          # 비교용 미사용 test DI 클립 수
     pool_clips: int = 48
     steps: int = 600
-    starts: list = field(default_factory=lambda: ["center", "multi", "encoder"])
+    starts: list = field(default_factory=lambda: ["prior_center", "prior_multi", "encoder"])
     stat_sets: dict = field(default_factory=lambda: {
         "ltas": ("ltas",), "ltas+level": ("ltas", "level"), "all4": STAT_KEYS})
     sessions: list = field(default_factory=lambda: ["none", "correct", "wrong"])
     session_only_baseline: bool = True
     seed: int = 0
+
+
+# 예전 exp1_results.jsonl의 시작점 이름 → 지금 이름
+_OLD_START = {"center": "prior_center", "multi": "prior_multi"}
 
 
 def make_fake_songs(test_reader, cfg: Exp1Config, G: GrayboxAmp, device: str = "cpu"):
@@ -212,7 +216,7 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     if res_path.exists():
         for line in res_path.read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
-            done.add((r["song"], r["start"], r["stats"], r["session"]))
+            done.add((r["song"], _OLD_START.get(r["start"], r["start"]), r["stats"], r["session"]))
 
     G = GrayboxAmp().to(device)
     songs = make_fake_songs(test_reader, cfg, G, device)
@@ -251,16 +255,16 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                         continue
                     if start == "encoder" and theta_hat is None:
                         continue
-                    if start == "center":
+                    if start == "prior_center":
                         starts, names = prior.center[None], ["prior_center"]
-                    elif start == "multi":
+                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 3개
                         starts, names = make_starts(prior, None, 4, rng)
                     else:
                         starts, names = np.asarray(theta_hat)[None], ["encoder"]
                     fc = FitConfig(steps=cfg.steps, seed=cfg.seed)
                     res = fit(target, pool, prior, theta_hat=theta_hat if start == "encoder" else None,
                               cfg=fc, starts=starts, start_names=names, stat_keys=keys)
-                    m = _evaluate_theta(res.theta_best.numpy(), song, G, device)
+                    m = _evaluate_theta(res.theta_star.numpy(), song, G, device)
                     r = {"song": song["id"], "start": start, "stats": stat_name, "session": sess_name,
                          "fit_loss": float(res.losses.min()), **m}
                     record(r)
@@ -288,6 +292,7 @@ def summarize_exp1(results_path: str | Path) -> "object":
 
     rows = [json.loads(l) for l in Path(results_path).read_text(encoding="utf-8").splitlines()]
     df = pd.DataFrame([{k: v for k, v in r.items() if k != "theta_err"} for r in rows])
+    df["start"] = df["start"].replace(_OLD_START)
     return df.groupby(["session", "stats", "start"])[["esr", "mrstft", "mel_l1", "theta_rmse_norm"]] \
         .agg(["mean", "median"]).round(4)
 

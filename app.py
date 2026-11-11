@@ -1,6 +1,6 @@
 """Gradio 데모 앱 (설계 문서 5장).
 
-화면 흐름: 1. 업로드·분리 → 2. 구간 선택 → 3. 세션 정보 → 4. 톤 찾기 → 5. .nam 생성
+화면 흐름(괄호는 모듈 번호): 1. 업로드·분리(①) → 2. 구간 선택(①) → 3. 세션 정보(②) → 4. 톤 찾기(⑥) → 5. .nam 생성(⑦)
 
     python app.py [--share] [--egdb data/EGDB/audio_DI] [--nam-input data/nam/v3_0_0.wav] [--encoder ...]
 
@@ -246,7 +246,7 @@ def find_tone(steps, state):
     cands = [str(rd / f"candidate_{k}.wav") for k in range(len(res.candidates))]
     diag = "\n".join(res.diagnostics["messages"]) or "통계 잔여 차이 작음"
     state["n_candidates"] = len(cands)
-    yield (fig_curve(res.curve), fig_theta(res.theta_best), cands[0] if cands else None,
+    yield (fig_curve(res.curve), fig_theta(res.theta_star), cands[0] if cands else None,
            cands[1] if len(cands) > 1 else None, f"θ* 손실 {float(res.losses.min()):.4f}\n{diag}", state)
 
 
@@ -293,7 +293,7 @@ def build():
             load_btn = gr.Button("불러오기")
             load_msg = gr.Textbox(label="결과", lines=6)
 
-        with gr.Tab("1. 업로드·분리"):
+        with gr.Tab("1. 업로드·분리 (①)"):
             audio = gr.Audio(type="filepath", label="음원 파일")
             song_name = gr.Textbox(label="곡 이름(선택)")
             sep_btn = gr.Button("기타 분리 (Demucs htdemucs_6s)")
@@ -302,7 +302,7 @@ def build():
             rec_txt = gr.Textbox(label="추천 구간 [[시작, 끝], ...]")
             sep_msg = gr.Markdown()
 
-        with gr.Tab("2. 구간 선택"):
+        with gr.Tab("2. 구간 선택 (①)"):
             target = gr.Radio(["rhythm", "lead"], value="rhythm", label="capture_target")
             same_rig = gr.Checkbox(True, label="same_rig (여러 기타가 같은 장비)")
             with gr.Row():
@@ -318,7 +318,7 @@ def build():
             chk_btn = gr.Button("점검하고 저장")
             chk_msg = gr.Textbox(label="점검 결과", lines=4)
 
-        with gr.Tab("3. 세션 정보"):
+        with gr.Tab("3. 세션 정보 (②)"):
             link = gr.Textbox(label="곡 링크 또는 '아티스트 - 곡명' (LLM 조사, 선택)")
             llm_btn = gr.Button("LLM 장비 조사")
             llm_msg = gr.Textbox(label="조사 초안 (출처·확신도)", lines=8)
@@ -332,9 +332,9 @@ def build():
                 model = gr.Textbox(label="앰프 모델(자유 텍스트)")
             sess_btn = gr.Button("확인·저장")
             sess_msg = gr.Markdown()
-            prior_fig = gr.Plot(label="사전분포 중심 θ")
+            prior_fig = gr.Plot(label="사전 범위 중심 θ")
 
-        with gr.Tab("4. 톤 찾기"):
+        with gr.Tab("4. 톤 찾기 (⑥)"):
             steps = gr.Slider(100, 2000, value=800, step=50, label="최적화 스텝")
             fit_btn = gr.Button("톤 찾기 (⑥)")
             curve = gr.Plot(label="손실 곡선")
@@ -344,7 +344,7 @@ def build():
                 cand_b = gr.Audio(label="후보 B")
             theta_fig = gr.Plot(label="θ: 앰프 노브와 블록별 주파수 응답")
 
-        with gr.Tab("5. .nam 생성"):
+        with gr.Tab("5. .nam 생성 (⑦)"):
             rank = gr.Number(0, label="후보 번호 (0 = θ*)", precision=0)
             epochs = gr.Slider(10, 300, value=100, step=10, label="NAM 학습 epoch")
             nam_btn = gr.Button(".nam 생성 (⑦)")

@@ -1,4 +1,4 @@
-"""데이터 내려받기: EGDB audio_DI, NAM 표준 입력 v3_0_0.wav (설계 문서 4.6 배포).
+"""데이터 내려받기: EGDB audio_DI, NAM 학습 입력 신호 v3.0.0(v3_0_0.wav로 저장) (설계 문서 4.6 배포).
 
     python -m ampcap.get_data [--data data]
 
@@ -15,7 +15,7 @@ from pathlib import Path
 EGDB_DI_FOLDER = "1AfpAaWnBvrTLHxe2DafgQ4mz4GGBjwAa"
 EGDB_N = 240
 EGDB_PAGE = "https://ss12f32v.github.io/Guitar-Transcription/"
-# NAM 문서의 표준 입력 input.wav (v3.0.0)
+# NAM 문서의 학습 입력 신호 input.wav (v3.0.0)
 NAM_INPUT_ID = "1KbaS4oXXNEuh2aCPLwKrPdf5KFOjda8G"
 NAM_INPUT_MD5 = "36cd1af62985c2fac3e654333e36431e"  # nam.train.core._detect_input_version의 v3.0.0 해시
 NAM_DOCS = "https://neural-amp-modeler.readthedocs.io/en/latest/tutorials/colab.html"
@@ -42,7 +42,7 @@ def get_nam_input(data_dir="data", download=_gdown_file) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     if not download(NAM_INPUT_ID, out) or md5(out) != NAM_INPUT_MD5:
         out.unlink(missing_ok=True)
-        raise RuntimeError(f"NAM 표준 입력을 받지 못했거나 파일이 다릅니다. {NAM_DOCS} 의 input.wav를 받아 {out}에 두세요.")
+        raise RuntimeError(f"NAM 학습 입력 신호를 받지 못했거나 파일이 다릅니다. {NAM_DOCS} 의 input.wav를 받아 {out}에 두세요.")
     return out
 
 
@@ -97,7 +97,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", default="data")
     a = ap.parse_args(argv)
-    print("NAM 표준 입력:", get_nam_input(a.data))
+    print("NAM 학습 입력 신호:", get_nam_input(a.data))
     print("EGDB DI:", get_egdb(a.data), "개")
 
 

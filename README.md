@@ -2,14 +2,16 @@
 
 상업 음원 하나와 기타 세션 정보만으로 [Neural Amp Modeler](https://neural-amp-modeler.readthedocs.io)에서 바로 쓸 수 있는 `.nam` 캡처를 만드는 프로젝트입니다.
 
-일반 NAM 캡처는 DI와 앰프 출력을 맞춘 페어 데이터로 학습합니다. 이 프로젝트는 DI 없이 음원의 기타 스템 통계만으로 미분 가능한 그레이박스 앰프의 설정을 찾고, 그 앰프로 NAM 표준 입력을 재앰핑해 `.nam`을 증류합니다.
+일반 NAM 캡처는 DI와 앰프 출력을 맞춘 페어 데이터로 학습합니다. 이 프로젝트는 DI 없이 음원의 기타 스템 통계만으로 미분 가능한 그레이박스 앰프의 설정을 찾고, 그 앰프로 NAM 학습 입력 신호(NAM 문서의 `input.wav`, v3.0.0)를 리앰핑해 `.nam`을 증류합니다.
+
+용어는 설계 문서 13장 용어집을 따릅니다.
 
 자세한 설계는 [docs/2026-11-09-ampcap-design.md](docs/2026-11-09-ampcap-design.md)를 보세요.
 
 ## 파이프라인
 
 ```
-음원 → ① 분리·구간 선택 → ② 세션 처리 → ⑤ 인코더 θ̂ → ⑥ 통계 손실 미세조정 θ* → ⑦ .nam 증류
+음원 → ① 분리·구간 선택 → ② 세션 처리 → ⑤ 인코더 θ̂ → ⑥ 곡별 파라미터 최적화 θ* → ⑦ .nam 증류
 ```
 
 ## 구조
@@ -36,7 +38,7 @@ pip install -r requirements.txt
 
 ## 데이터
 
-EGDB DI와 NAM 표준 입력은 공식 Google Drive에서 직접 받습니다. 다시 실행하면 이어 받습니다.
+EGDB DI와 NAM 학습 입력 신호는 공식 Google Drive에서 직접 받습니다. 다시 실행하면 이어 받습니다.
 
 ```bash
 python -m ampcap.get_data --data data
@@ -69,6 +71,6 @@ python app.py
 | `00_setup_and_tests.ipynb` | 설치, `pytest tests/`, ⑦ ESR 테스트, EGDB 분할, 대응표 청취 |
 | `01_train_encoder.ipynb` | ④ 합성 데이터로 ⑤ 인코더 학습 (체크포인트 이어 학습) |
 | `02_song_to_nam.ipynb` | 음원 → .nam 전체 경로, (b) 세션만 경로, Gradio 앱(`--share`) |
-| `03_experiment1.ipynb` | ⑨ 실험 1 합성 되찾기 |
+| `03_experiment1.ipynb` | ⑨ 실험 1 파라미터 복원 실험 |
 
-필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 표준 학습 입력). 둘 다 `00_setup_and_tests.ipynb`의 0번 셀(`ampcap.get_data`)이 받습니다. ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.
+필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 학습 입력 신호 `input.wav` v3.0.0을 이 이름으로 저장). 둘 다 `00_setup_and_tests.ipynb`의 0번 셀(`ampcap.get_data`)이 받습니다. ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.

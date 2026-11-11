@@ -34,7 +34,7 @@ def test_overfits_small_batch():
         first = first if first is not None else float(loss)
     model.eval()
     with torch.no_grad():
-        final = float((model(batch["y_aug"], batch["session"]) - batch["theta"]).square().mean())
+        final = float((model(batch["y_aug"], batch["session_vec"]) - batch["theta"]).square().mean())
     print("θ MSE", first, "→", final)
     assert final < 1e-3
 

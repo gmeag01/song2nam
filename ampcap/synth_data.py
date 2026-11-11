@@ -1,10 +1,10 @@
 """④ 합성 데이터 생성기와 EGDB DI 분할.
 
 샘플 하나의 생성 과정(설계 문서 4.5):
-1. 세션 필드 값을 무작위로 정하고 ②로 사전분포를 만든다. 약 20%는 θ 전체 범위에서 뽑는다.
-2. 사전분포 안에서 θ를 뽑는다.
-3. 세션 벡터에 드롭아웃을 적용한다.
-4. EGDB DI에서 3초를 잘라 입력 음량을 무작위로 바꾼다.
+1. 세션 필드 값을 무작위로 정하고 ②로 사전 범위를 만든다. 약 20%는 θ 전체 범위에서 뽑는다.
+2. 사전 범위 안에서 θ를 균등하게 뽑는다.
+3. 세션에 조건 드롭아웃(unknown 마스킹)과 confidence 증강을 적용한다.
+4. EGDB DI에서 3초를 잘라 DI 레벨을 무작위로 바꾼다(DI 레벨 증강).
 5. y = G(x; θ)를 렌더링한다(GPU).
 6. pedalboard로 무작위 EQ, 컴프, 짧은 리버브 증강을 건다.
 
@@ -166,7 +166,7 @@ class SynthConfig:
     p_full_range: float = 0.2
     p_unknown: float = 0.3
     p_lower_conf: float = 0.3
-    in_gain_db: tuple[float, float] = (-12.0, 6.0)  # DI 입력 음량 무작위
+    di_gain_range_db: tuple[float, float] = (-12.0, 6.0)  # DI 레벨 증강 범위 (θ의 in_gain_db와 별개)
     augment: bool = True
     target_rms: float = 0.1
 
@@ -204,7 +204,7 @@ class SynthGenerator:
             thetas.append(th)
             svecs.append(sv)
         x = self.reader.batch(n, self.rng)
-        g = 10 ** (self.rng.uniform(*c.in_gain_db, size=(n, 1)) / 20)
+        g = 10 ** (self.rng.uniform(*c.di_gain_range_db, size=(n, 1)) / 20)
         x = (normalize_di(x) * g).astype(np.float32)
 
         xt = torch.from_numpy(x).to(self.device)
@@ -221,4 +221,4 @@ class SynthGenerator:
         else:
             y_aug = y
         return {"x": xt, "y": y, "y_aug": y_aug, "theta": th,
-                "session": torch.as_tensor(np.stack(svecs), device=self.device)}
+                "session_vec": torch.as_tensor(np.stack(svecs), device=self.device)}

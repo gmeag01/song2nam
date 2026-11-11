@@ -145,7 +145,7 @@ class GrayboxAmp(nn.Module):
       x:     (B, T) 48kHz 모노
       theta: (B, 24) 또는 (24,) ∈ [0,1]
       mode:  "fft"(학습, 주파수 영역 FIR 근사) / "iir"(lfilter, ⑦ 렌더링·검증)
-      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(⑥ 미세조정, ⑦ 최종 렌더링).
+      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(⑥ 곡별 파라미터 최적화, ⑦ 최종 렌더링).
       target_rms: 지정하면 출력 RMS를 이 값으로 맞춘다(스템 RMS 정규화). 스칼라 또는 (B,).
       bypass: 건너뛸 블록 이름 집합(시각화·테스트용).
     """
