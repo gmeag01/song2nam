@@ -208,11 +208,10 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     res_path = out_dir / "exp1_results.jsonl"
-    done = set()
-    if res_path.exists():
-        for line in res_path.read_text(encoding="utf-8").splitlines():
-            r = json.loads(line)
-            done.add((r["song"], r["start"], r["stats"], r["session"]))
+    done = {(r["song"], r["start"], r["stats"], r["session"]) for r in read_results(res_path)}
+    if res_path.exists() and res_path.stat().st_size and not res_path.read_bytes().endswith(b"\n"):
+        with res_path.open("a", encoding="utf-8") as f:   # 반쯤 쓰인 줄에 새 결과가 붙지 않게
+            f.write("\n")
 
     G = GrayboxAmp().to(device)
     songs = make_fake_songs(test_reader, cfg, G, device)
@@ -282,11 +281,27 @@ def _evaluate_theta(theta, song, G, device) -> dict:
     return m
 
 
+def read_results(path: str | Path) -> list[dict]:
+    """exp1_results.jsonl 읽기. 세션이 쓰는 도중 끊겨 깨진 줄은 건너뛴다(그 조합은 다시 돌린다)."""
+    path = Path(path)
+    if not path.exists():
+        return []
+    rows, bad = [], 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            bad += bool(line.strip())
+    if bad:
+        print(f"{path}: 깨진 줄 {bad}개를 건너뜀")
+    return rows
+
+
 def summarize_exp1(results_path: str | Path) -> "object":
     """조건별 평균 표(pandas DataFrame)."""
     import pandas as pd
 
-    rows = [json.loads(l) for l in Path(results_path).read_text(encoding="utf-8").splitlines()]
+    rows = read_results(results_path)
     df = pd.DataFrame([{k: v for k, v in r.items() if k != "theta_err"} for r in rows])
     return df.groupby(["session", "stats", "start"])[["esr", "mrstft", "mel_l1", "theta_rmse_norm"]] \
         .agg(["mean", "median"]).round(4)
@@ -294,4 +309,4 @@ def summarize_exp1(results_path: str | Path) -> "object":
 
 __all__ = ["esr", "mrstft_distance", "mel_l1", "theta_error_units", "stat_distance", "fad_mel",
            "mushra_summary", "plot_band_diff", "compare_to_truth", "Exp1Config", "run_experiment1",
-           "summarize_exp1", "NAMES"]
+           "summarize_exp1", "read_results", "NAMES"]
