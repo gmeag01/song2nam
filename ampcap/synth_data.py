@@ -157,6 +157,24 @@ def augment_mix(y: np.ndarray, rng: np.random.Generator, sr: int = SR) -> np.nda
     return out.astype(np.float32)
 
 
+def augment_separation(y: np.ndarray, rng: np.random.Generator, sr: int = SR) -> np.ndarray:
+    """분리 잔여물 근사 증강: 무작위 고역 감쇠(LP)와 배경 노이즈. ④ 학습에서만 쓴다.
+    shortcut: 실제 분리 잔여물(다른 악기 블리드, 마스킹 왜곡)은 흉내 내지 않는다. Demucs 검증 세트로 차이가 보이면 넣는다."""
+    out = y.astype(np.float32)
+    if rng.random() < 0.5:
+        try:
+            import pedalboard as pb
+
+            out = pb.LowpassFilter(cutoff_frequency_hz=float(rng.uniform(6000, 16000)))(out, sr)
+        except ImportError:
+            pass
+    if rng.random() < 0.5:
+        snr_db = rng.uniform(25, 45)
+        r = np.sqrt(np.mean(out ** 2)) + 1e-12
+        out = out + rng.standard_normal(out.shape).astype(np.float32) * r * 10 ** (-snr_db / 20)
+    return out.astype(np.float32)
+
+
 # ---------------------------------------------------------------- 생성기
 
 
@@ -168,6 +186,7 @@ class SynthConfig:
     p_lower_conf: float = 0.3
     di_gain_range_db: tuple[float, float] = (-12.0, 6.0)  # DI 레벨 증강 범위 (θ의 in_gain_db와 별개)
     augment: bool = True
+    separation_aug: bool = True   # augment가 켜져 있을 때 분리 잔여물 근사 증강도 건다
     target_rms: float = 0.1
 
 
@@ -215,7 +234,10 @@ class SynthGenerator:
 
         if c.augment:
             y_np = y.cpu().numpy()
-            y_aug = np.stack([augment_mix(v, self.rng) for v in y_np])
+            y_aug = [augment_mix(v, self.rng) for v in y_np]
+            if c.separation_aug:
+                y_aug = [augment_separation(v, self.rng) for v in y_aug]
+            y_aug = np.stack(y_aug)
             y_aug = torch.from_numpy(y_aug).to(self.device)
             y_aug = y_aug / rms(y_aug)[:, None] * c.target_rms
         else:

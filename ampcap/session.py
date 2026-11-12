@@ -1,7 +1,7 @@
 """② 세션 스키마 검증, 대응표, 사전 범위, 세션 벡터.
 
-대응표 값은 일반적으로 알려진 앰프 계열별 특징을 바탕으로 한 초기 가정이다(설계 문서 4.3).
-대표 설정을 G로 렌더링해 들어 보고 `MAPPING`을 조정한다.
+대응표 v2 값은 회로·측정 자료로 다시 검증한 범위다(설계 문서 4.3). 근거가 약한 칸이 남아 있다.
+값이나 사전 범위 규칙을 바꾸면 `MAPPING_VERSION`을 올린다.
 """
 
 from __future__ import annotations
@@ -147,62 +147,72 @@ def _u(name: str, lo: float, hi: float) -> tuple[float, float]:
     return (min(a, b), max(a, b))
 
 
+# 대응표 버전: MAPPING 값이나 사전 범위 규칙(게인 우선 규칙 등)을 바꾸면 올린다. θ 버전과 별개.
+MAPPING_VERSION = 2
+
 MAPPING: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
     "guitar.pickup": {
-        "single": {"in_gain_db": _u("in_gain_db", -12, 2), "in_hp_hz": _u("in_hp_hz", 40, 120)},
-        "p90": {"in_gain_db": _u("in_gain_db", -6, 6), "in_hp_hz": _u("in_hp_hz", 40, 150)},
-        "humbucker": {"in_gain_db": _u("in_gain_db", 0, 12), "in_hp_hz": _u("in_hp_hz", 60, 200)},
+        # in_hp_hz는 v2에서 계열로 이동 (픽업은 LC 저역통과, 종류별 하이패스 근거 없음)
+        "single": {"in_gain_db": _u("in_gain_db", -10, 0)},
+        "p90": {"in_gain_db": _u("in_gain_db", -4, 4)},
+        "humbucker": {"in_gain_db": _u("in_gain_db", -2, 11)},
     },
     "amp.family": {
         "fender": {
-            "pre1_gain_db": _u("pre1_gain_db", 0, 20), "pre2_gain_db": _u("pre2_gain_db", 0, 14),
-            "ts_bass_db": _u("ts_bass_db", -2, 10), "ts_mid_db": _u("ts_mid_db", -12, 0),
-            "ts_mid_hz": _u("ts_mid_hz", 300, 900), "ts_treble_db": _u("ts_treble_db", 0, 12),
-            "pa_drive_db": _u("pa_drive_db", 2, 16), "pa_sag": (0.3, 1.0),
+            "pre1_gain_db": _u("pre1_gain_db", 0, 18), "pre2_gain_db": _u("pre2_gain_db", 0, 16),
             "pre1_bias": _u("pre1_bias", -0.1, 0.1),
+            "ts_bass_db": _u("ts_bass_db", -6, 12), "ts_mid_hz": _u("ts_mid_hz", 300, 1250),
+            "ts_mid_db": _u("ts_mid_db", -12, -3), "ts_treble_db": _u("ts_treble_db", -5, 12),
+            "pa_drive_db": _u("pa_drive_db", 2, 18), "pa_sag": (0.1, 0.8),
+            "pa_presence_db": _u("pa_presence_db", -6, 6), "in_hp_hz": _u("in_hp_hz", 40, 80),
         },
         "vox": {
-            "pre1_gain_db": _u("pre1_gain_db", 6, 26), "pre2_gain_db": _u("pre2_gain_db", 0, 18),
-            "ts_mid_db": _u("ts_mid_db", -4, 4), "ts_treble_db": _u("ts_treble_db", 2, 12),
-            "pa_drive_db": _u("pa_drive_db", 8, 20), "pa_sag": (0.3, 0.9),
-            "pa_presence_db": _u("pa_presence_db", 0, 12),
+            "pre1_gain_db": _u("pre1_gain_db", 0, 26), "pre2_gain_db": _u("pre2_gain_db", 0, 20),
+            "ts_mid_hz": _u("ts_mid_hz", 450, 1350), "ts_mid_db": _u("ts_mid_db", -12, -4),
+            "ts_treble_db": _u("ts_treble_db", -5, 12),
+            "pa_drive_db": _u("pa_drive_db", 3, 20), "pa_sag": (0.2, 0.9),
+            "pa_presence_db": _u("pa_presence_db", -9, 6), "in_hp_hz": _u("in_hp_hz", 40, 150),
         },
         "british": {
-            "pre1_gain_db": _u("pre1_gain_db", 14, 36), "pre2_gain_db": _u("pre2_gain_db", 10, 32),
-            "ts_mid_db": _u("ts_mid_db", 0, 10), "ts_mid_hz": _u("ts_mid_hz", 600, 1600),
-            "pa_drive_db": _u("pa_drive_db", 4, 14), "pa_sag": (0.1, 0.6),
+            "pre1_gain_db": _u("pre1_gain_db", 12, 36), "pre2_gain_db": _u("pre2_gain_db", 10, 34),
             "pre1_bias": _u("pre1_bias", 0.0, 0.35),
+            "ts_bass_db": _u("ts_bass_db", -3, 8), "ts_mid_hz": _u("ts_mid_hz", 400, 1350),
+            "ts_mid_db": _u("ts_mid_db", -11, -2), "ts_treble_db": _u("ts_treble_db", -6, 3),
+            "pa_drive_db": _u("pa_drive_db", 4, 18), "pa_sag": (0.1, 0.6),
+            "in_hp_hz": _u("in_hp_hz", 60, 160),
         },
         "american_hg": {
-            "pre1_gain_db": _u("pre1_gain_db", 24, 40), "pre2_gain_db": _u("pre2_gain_db", 20, 40),
-            "ts_mid_db": _u("ts_mid_db", -10, 2), "ts_bass_db": _u("ts_bass_db", 0, 10),
+            "pre1_gain_db": _u("pre1_gain_db", 22, 40), "pre2_gain_db": _u("pre2_gain_db", 18, 40),
+            "pre1_bias": _u("pre1_bias", 0.0, 0.35),
+            "ts_bass_db": _u("ts_bass_db", -6, 9), "ts_mid_hz": _u("ts_mid_hz", 300, 1150),
+            "ts_mid_db": _u("ts_mid_db", -12, -2), "ts_treble_db": _u("ts_treble_db", -5, 9),
             "pa_drive_db": _u("pa_drive_db", 2, 10), "pa_sag": (0.0, 0.5),
+            "in_hp_hz": _u("in_hp_hz", 70, 180),
         },
         "modern_hg": {
-            "pre1_gain_db": _u("pre1_gain_db", 28, 40), "pre2_gain_db": _u("pre2_gain_db", 24, 40),
-            "ts_mid_db": _u("ts_mid_db", -10, 4), "in_hp_hz": _u("in_hp_hz", 80, 200),
+            "pre1_gain_db": _u("pre1_gain_db", 24, 40), "pre2_gain_db": _u("pre2_gain_db", 20, 40),
+            "ts_mid_db": _u("ts_mid_db", -12, -1), "in_hp_hz": _u("in_hp_hz", 80, 200),
             "pa_drive_db": _u("pa_drive_db", 0, 8), "pa_sag": (0.0, 0.3),
         },
     },
     "amp.gain": {
-        "low": {"pre1_gain_db": _u("pre1_gain_db", 0, 16), "pre2_gain_db": _u("pre2_gain_db", 0, 12),
+        "low": {"pre1_gain_db": _u("pre1_gain_db", 0, 14), "pre2_gain_db": _u("pre2_gain_db", 0, 12),
                 "boost_drive_db": _u("boost_drive_db", 0, 10)},
-        "mid": {"pre1_gain_db": _u("pre1_gain_db", 12, 28), "pre2_gain_db": _u("pre2_gain_db", 8, 24)},
-        "high": {"pre1_gain_db": _u("pre1_gain_db", 24, 40), "pre2_gain_db": _u("pre2_gain_db", 20, 40)},
+        "mid": {"pre1_gain_db": _u("pre1_gain_db", 10, 28), "pre2_gain_db": _u("pre2_gain_db", 6, 24)},
+        "high": {"pre1_gain_db": _u("pre1_gain_db", 22, 40), "pre2_gain_db": _u("pre2_gain_db", 18, 40)},
     },
     "cab.size": {
-        "1x12": {"cab_hp_hz": _u("cab_hp_hz", 80, 200), "cab_res_hz": _u("cab_res_hz", 100, 200),
-                 "cab_lp_hz": _u("cab_lp_hz", 4000, 7000)},
-        "2x12": {"cab_hp_hz": _u("cab_hp_hz", 60, 140), "cab_res_hz": _u("cab_res_hz", 80, 150)},
-        "4x12": {"cab_hp_hz": _u("cab_hp_hz", 40, 100), "cab_res_hz": _u("cab_res_hz", 60, 120),
-                 "cab_lp_hz": _u("cab_lp_hz", 3000, 5500)},
+        "1x12": {"cab_hp_hz": _u("cab_hp_hz", 60, 160), "cab_res_hz": _u("cab_res_hz", 70, 130),
+                 "cab_lp_hz": _u("cab_lp_hz", 3500, 6500)},
+        "2x12": {"cab_hp_hz": _u("cab_hp_hz", 50, 130), "cab_res_hz": _u("cab_res_hz", 75, 140)},
+        "4x12": {"cab_hp_hz": _u("cab_hp_hz", 40, 100), "cab_res_hz": _u("cab_res_hz", 65, 130),
+                 "cab_lp_hz": _u("cab_lp_hz", 3000, 6000)},
     },
     "boost": {
-        # none: 드라이브 0 고정, 미드 0, 레벨 0dB
         "none": {"boost_drive_db": (0.0, 0.0), "boost_mid_db": (0.0, 0.0),
                  "boost_level_db": (0.5, 0.5)},
-        "tube_screamer": {"boost_mid_hz": _u("boost_mid_hz", 600, 900), "boost_mid_db": _u("boost_mid_db", 4, 12),
-                         "boost_drive_db": _u("boost_drive_db", 0, 18), "boost_level_db": _u("boost_level_db", 0, 10)},
+        "tube_screamer": {"boost_mid_hz": _u("boost_mid_hz", 600, 1000), "boost_mid_db": _u("boost_mid_db", 8, 12),
+                          "boost_drive_db": _u("boost_drive_db", 6, 30), "boost_level_db": _u("boost_level_db", 0, 10)},
     },
 }
 
@@ -232,6 +242,7 @@ class Prior:
             "names": NAMES,
             "lo": self.lo.round(4).tolist(), "hi": self.hi.round(4).tolist(),
             "center": self.center.round(4).tolist(), "warnings": self.warnings,
+            "mapping_version": MAPPING_VERSION,
         }
 
     @staticmethod
@@ -263,9 +274,10 @@ def compute_prior(session: dict) -> Prior:
     for i, rs in ranges.items():
         a = max(r[0] for r in rs)
         b = min(r[1] for r in rs)
-        if a > b + 1e-9:
-            a = min(r[0] for r in rs)
-            b = max(r[1] for r in rs)
+        if a > b + 1e-9:  # 빈 교집합: 게인 우선 규칙(amp.gain 범위), amp.gain이 없으면 합집합
+            gain = [r for r in rs if r[2].startswith("amp.gain=")]
+            a = gain[0][0] if gain else min(r[0] for r in rs)
+            b = gain[0][1] if gain else max(r[1] for r in rs)
             warnings.append(f"range_conflict:{NAMES[i]}:" + ",".join(r[2] for r in rs))
         lo[i], hi[i] = a, max(a, b)
     return Prior(lo, hi, (lo + hi) / 2, warnings)

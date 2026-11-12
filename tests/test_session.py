@@ -24,15 +24,34 @@ def test_overlap_uses_intersection():
     assert p.warnings == []
 
 
-def test_conflict_widens_to_union_with_warning():
-    p = S.compute_prior({"amp": {"family": "fender", "gain": "high"}})
-    i = INDEX["pre1_gain_db"]
-    fam = S.MAPPING["amp.family"]["fender"]["pre1_gain_db"]
-    gain = S.MAPPING["amp.gain"]["high"]["pre1_gain_db"]
-    assert fam[1] < gain[0]  # 정말 겹치지 않는 경우인지
-    assert p.lo[i] == pytest.approx(min(fam[0], gain[0]))
-    assert p.hi[i] == pytest.approx(max(fam[1], gain[1]))
-    assert any(w.startswith("range_conflict:pre1_gain_db") for w in p.warnings)
+@pytest.mark.parametrize("fam,gain", [("fender", "high"), ("american_hg", "low")])
+def test_conflict_uses_gain_range_with_warning(fam, gain):
+    """빈 교집합은 게인 우선 규칙: amp.gain 범위를 쓰고 경고를 남긴다."""
+    p = S.compute_prior({"amp": {"family": fam, "gain": gain}})
+    for name in ("pre1_gain_db", "pre2_gain_db"):
+        i = INDEX[name]
+        f = S.MAPPING["amp.family"][fam][name]
+        g = S.MAPPING["amp.gain"][gain][name]
+        assert f[1] < g[0] or g[1] < f[0]  # 정말 겹치지 않는 경우인지
+        assert (p.lo[i], p.hi[i]) == pytest.approx(g)
+        assert any(w.startswith(f"range_conflict:{name}") for w in p.warnings)
+
+
+def test_all_families_ts_mid_nonpositive():
+    for fam, m in S.MAPPING["amp.family"].items():
+        assert m["ts_mid_db"][1] <= S._u("ts_mid_db", 0, 0)[0] + 1e-9, fam
+
+
+def test_in_hp_from_family_not_pickup():
+    assert all("in_hp_hz" not in m for m in S.MAPPING["guitar.pickup"].values())
+    assert all("in_hp_hz" in m for m in S.MAPPING["amp.family"].values())
+    i = INDEX["in_hp_hz"]
+    p = S.compute_prior({"guitar": {"pickup": "humbucker"}})
+    assert (p.lo[i], p.hi[i]) == (0.0, 1.0)
+
+
+def test_prior_json_has_mapping_version():
+    assert S.compute_prior({}).to_dict()["mapping_version"] == S.MAPPING_VERSION == 2
 
 
 def test_low_confidence_widens_toward_full_range():

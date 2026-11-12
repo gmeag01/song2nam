@@ -20,14 +20,14 @@ import torch
 
 from ampcap import separate
 from ampcap import session as sess_mod
-from ampcap.encoder import BEST_PATH
+from ampcap.encoder import default_encoder_path
 from ampcap.graybox.amp import BLOCKS, NAMES, GrayboxAmp
 from ampcap.pipeline import load_di_pool, make_run_dir
 from ampcap.synth_data import DI_REF_RMS, di_reader_for_split, normalize_di
 
 ARGS = argparse.Namespace(egdb=os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI"),
                           nam_input=os.environ.get("AMPCAP_NAM_INPUT", "data/nam/v3_0_0.wav"),
-                          encoder=os.environ.get("AMPCAP_ENCODER", str(BEST_PATH)), split_file="data/egdb_split.json")
+                          encoder=os.environ.get("AMPCAP_ENCODER", str(default_encoder_path())), split_file="data/egdb_split.json")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 SCOPE_KO = {"song": "곡 단위 장비", "usual": "평소 장비"}  # ②-0 출처 범위 표시
 

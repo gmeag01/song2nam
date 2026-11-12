@@ -205,15 +205,20 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                     log=print) -> list[dict]:
     """실험 1. 결과는 out_dir/exp1_results.jsonl에 한 줄씩 쌓는다(중단 후 이어서 실행 가능)."""
     from .optimize import FitConfig, fit, make_starts
-    from .session import compute_prior, session_vector, unknown_session
+    from .session import MAPPING_VERSION, compute_prior, session_vector, unknown_session
     from .synth_data import normalize_di
 
     cfg = cfg or Exp1Config()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     res_path = out_dir / "exp1_results.jsonl"
-    done = {(r["song"], _OLD_START.get(r["start"], r["start"]), r["stats"], r["session"])
-            for r in read_results(res_path)}
+    old_rows = read_results(res_path)
+    # θ_true를 지금 MAPPING으로 다시 뽑으므로 대응표 버전이 다른 행과는 이어 실행할 수 없다(필드 없음 = 1)
+    other = {r.get("mapping_version", 1) for r in old_rows} - {MAPPING_VERSION}
+    if other:
+        raise ValueError(f"{res_path}: 대응표 버전 {sorted(other)}의 결과가 있습니다. 지금은 {MAPPING_VERSION}. "
+                         "다른 out_dir을 쓰세요.")
+    done = {(r["song"], _OLD_START.get(r["start"], r["start"]), r["stats"], r["session"]) for r in old_rows}
     if res_path.exists() and res_path.stat().st_size and not res_path.read_bytes().endswith(b"\n"):
         with res_path.open("a", encoding="utf-8") as f:   # 반쯤 쓰인 줄에 새 결과가 붙지 않게
             f.write("\n")
@@ -227,6 +232,7 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     results = []
 
     def record(r):
+        r["mapping_version"] = MAPPING_VERSION
         results.append(r)
         with res_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -272,6 +278,16 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     return results
 
 
+def canonical_bias(theta) -> np.ndarray:
+    """바이어스 기준형(pre1_bias ≥ 0). G(x; −b1, −b2) = −G(−x; b1, b2)이고 ⑥ 통계는 극성 불변이라
+    두 바이어스를 함께 뒤집은 θ는 구분할 수 없다. θ 거리 지표에만 쓴다."""
+    th = np.array(theta, dtype=np.float64).reshape(-1)
+    i1, i2 = NAMES.index("pre1_bias"), NAMES.index("pre2_bias")
+    if th[i1] < 0.5:  # 정규화 0.5 = 바이어스 0
+        th[[i1, i2]] = 1.0 - th[[i1, i2]]
+    return th
+
+
 def _evaluate_theta(theta, song, G, device) -> dict:
     th = torch.as_tensor(theta, dtype=torch.float32, device=device).reshape(1, -1)
 
@@ -280,8 +296,9 @@ def _evaluate_theta(theta, song, G, device) -> dict:
         return G.render(x, th)[0].cpu().numpy()
 
     m = compare_to_truth(song["theta"], pred, song["eval_di"], G, device)
-    err = theta_error_units(np.asarray(theta), song["theta"])
-    m["theta_rmse_norm"] = float(np.sqrt(np.mean((np.asarray(theta) - song["theta"]) ** 2)))
+    th_c, tr_c = canonical_bias(theta), canonical_bias(song["theta"])
+    err = theta_error_units(th_c, tr_c)
+    m["theta_rmse_norm"] = float(np.sqrt(np.mean((th_c - tr_c) ** 2)))
     m["theta_err"] = err
     return m
 
