@@ -1,10 +1,10 @@
-"""음원 → .nam 전체 실행 (설계 문서 8장 "전체 실행 스크립트").
+"""음원 → .nam 전체 실행 (설계 문서 4.11 "전체 실행 스크립트").
 
     python -m ampcap.pipeline song.wav --session session.json --egdb data/EGDB/audio_DI \
         --nam-input data/nam/v3_0_0.wav [--segments 42:58.5,131.2:140] [--encoder checkpoints/encoder_v1_best.pt]
 
 각 단계 결과는 runs/<날짜_곡명>/에 파일로 남기고, 다음 단계는 그 파일을 읽는다.
---session-only를 주면 (b) 경로: 사전분포 중심값을 θ로 쓰고 ⑤⑥을 건너뛴다.
+--session-only를 주면 (b) 세션만 경로: 사전 범위 중심값을 θ로 쓰고 ⑤⑥을 건너뛴다.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def load_di_pool(egdb_di_dir, n_clips: int = 48, split_file=None, seed: int = 0,
 
 def step_separate(audio_path, run_dir, segments=None, song="", same_rig=True, device=None):
     _, rep = separate.run(audio_path, run_dir, segments, song=song, same_rig=same_rig, device=device)
-    print("① 구간:", rep.segments, "연주", rep.active_sec, "초", rep.warnings)
+    print("① 구간:", rep.segments, "유효 연주 길이", rep.active_sec, "초", rep.warnings)
     if not rep.ok:
         raise SystemExit(rep.message)
 
@@ -98,7 +98,7 @@ def main(argv=None):
     ap.add_argument("--steps", type=int, default=800)
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--architecture", default="standard")
-    ap.add_argument("--session-only", action="store_true", help="(b) 세션 정보만으로 θ")
+    ap.add_argument("--session-only", action="store_true", help="(b) 세션만 경로: 사전 범위 중심을 θ로 쓰고 ⑤⑥을 건너뜀")
     ap.add_argument("--skip-distill", action="store_true")
     ap.add_argument("--device", default=None)
     a = ap.parse_args(argv)
@@ -117,7 +117,7 @@ def main(argv=None):
         theta = torch.tensor(prior.center, dtype=torch.float32)
         (run_dir / "theta_candidates.json").write_text(json.dumps({
             "theta_star": theta.tolist(), "mode": "session_only",
-            "note": "음원 분석 없이 장비 정보만으로 추정"}, ensure_ascii=False, indent=2), encoding="utf-8")
+            "note": "음원 분석 없이 세션 정보만으로 추정"}, ensure_ascii=False, indent=2), encoding="utf-8")
     else:
         di_pool = load_di_pool(a.egdb, split_file=a.split_file)
         theta_hat = step_encoder(a.encoder, stem, session, device)

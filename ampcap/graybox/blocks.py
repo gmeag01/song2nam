@@ -1,4 +1,4 @@
-"""입력단, 부스터, 프리앰프, 톤스택, 파워앰프, 캐비닛 블록.
+"""입력단, 부스트(오버드라이브), 프리앰프, 톤스택, 파워앰프, 캐비닛 블록.
 
 각 블록은 (x (B, T), p {이름: (B,) 실제 단위}, sr, mode) → (B, T).
 mode는 filters.apply_biquads의 "fft" / "iir".
@@ -95,7 +95,7 @@ def booster(x, p, sr, mode):
 
 
 def _preamp_stage(x, p, sr, mode, i):
-    """게인 → DC 오프셋 → tanh → DC 제거 → 로우패스."""
+    """게인 → DC 바이어스 → tanh → DC 제거 → 로우패스."""
     g = db2lin(p[f"pre{i}_gain_db"])[:, None]
     bias = p[f"pre{i}_bias"][:, None]
     # tanh(bias)를 빼서 무음일 때 출력이 0이 되게 한다(정적 DC 제거). 남는 DC는 하이패스가 지운다.
@@ -126,7 +126,7 @@ def power_amp(x, p, sr, mode):
 
 
 def cabinet(x, p, sr, mode):
-    """하이패스 → 피킹(공진) → 로우패스 → 피킹(음수 게인, 노치)."""
+    """하이패스 → 피킹(공진) → 로우패스 → 피킹(음수 게인, 딥)."""
     return F.apply_biquads(x, _cab_coeffs(p, sr), mode)
 
 

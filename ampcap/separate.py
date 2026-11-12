@@ -1,8 +1,8 @@
 """① 분리, 구간 점검, 추천 구간.
 
 1. Demucs `htdemucs_6s`로 스테레오 기타 스템을 얻는다.
-2. 짧은 창마다 좌우 상관도와 Side/Mid 에너지 비로 "기타 한 대" 가능성을 매겨 추천 구간을 낸다(참고용).
-3. 사용자가 고른 구간을 점검(연주 길이, 무음 제거, 클리핑, 섞임)하고 크로스페이드로 이어 붙여
+2. 짧은 창마다 좌우 상관도와 Side/Mid 에너지 비로 단일 기타 가능성을 매겨 추천 구간을 낸다(참고용).
+3. 사용자가 고른 구간을 점검(유효 연주 길이, 무음 제거, 클리핑, 여러 기타 혼입)하고 크로스페이드로 이어 붙여
    48kHz 모노 `stem.wav`와 `segments.json`으로 저장한다.
 """
 
@@ -125,7 +125,7 @@ def separate_guitar(audio: np.ndarray, sr: int = SR, device: str | None = None,
 
 
 def stereo_analysis(stem: np.ndarray, sr: int = SR, win_sec: float = 1.0, hop_sec: float = 0.5):
-    """창마다 (시작 초, 좌우 상관도, Side/Mid 에너지 비, 에너지 dB, 한 대 점수)."""
+    """창마다 (시작 초, 좌우 상관도, Side/Mid 에너지 비, 에너지 dB, 단일 기타 점수)."""
     if stem.ndim == 1 or stem.shape[0] == 1:
         stem = np.stack([np.ravel(stem)] * 2)
     L, R = stem[0], stem[1]
@@ -147,7 +147,7 @@ def stereo_analysis(stem: np.ndarray, sr: int = SR, win_sec: float = 1.0, hop_se
 
 def recommend_segments(stem: np.ndarray, sr: int = SR, threshold: float = 0.7,
                        min_len_sec: float = 3.0) -> list[list[float]]:
-    """한 대일 가능성이 높은 구간 [[시작, 끝], ...]. 판정은 참고용이다."""
+    """단일 기타 가능성이 높은 구간 [[시작, 끝], ...]. 판정은 참고용이다."""
     rows = stereo_analysis(stem, sr)
     if not rows:
         return []
@@ -189,7 +189,7 @@ def active_mask(x: np.ndarray, ref_db: float | None = None, frame: int = FRAME,
 
 def crossfade_concat(chunks: list[np.ndarray], sr: int = SR,
                      fade_sec: float = CROSSFADE_SEC, edge_fade: bool = True) -> np.ndarray:
-    """조각을 등전력 크로스페이드로 이어 붙인다(이음새 클릭 방지)."""
+    """조각을 등전력 크로스페이드로 이어 붙인다(크로스페이드 접합부 클릭 방지)."""
     chunks = [c for c in chunks if len(c) > 0]
     if not chunks:
         return np.zeros(0, dtype=np.float32)
@@ -257,7 +257,7 @@ def check_and_build(stem: np.ndarray, segments: list[list[float]], sr: int = SR,
                     stereo: np.ndarray | None = None) -> tuple[np.ndarray, SegmentReport]:
     """구간을 잘라 점검하고 이어 붙인다.
 
-    stem: (T,) 모노 또는 (2, T) 스테레오. stereo를 주면 섞임 점검에 쓴다.
+    stem: (T,) 모노 또는 (2, T) 스테레오. stereo를 주면 여러 기타 혼입 점검에 쓴다.
     segments가 비면 전체 스템을 쓰고 "여러 기타가 섞인 평균 톤" 경고를 단다.
     """
     if stem.ndim == 2:

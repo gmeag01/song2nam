@@ -45,7 +45,7 @@ Return ONLY one JSON object, no prose, in this shape:
 }
 Family guide: fender = Fender-style clean/blackface/tweed; vox = AC30-style class A; british = Marshall/Orange
 style; american_hg = Mesa Rectifier/Mark, 5150/6505, Soldano; modern_hg = Diezel, Engl, Friedman, modern
-tight high-gain. boost "ts" = Tube Screamer-style overdrive used as a boost; "none" = no pedal before the amp.
+tight high-gain. boost "tube_screamer" = Tube Screamer-style overdrive used as a boost; "none" = no pedal before the amp.
 """ % {"pickup": PICKUPS, "family": FAMILIES, "gain": GAINS, "cab": CABS, "boost": BOOSTS}
 
 

@@ -1,11 +1,11 @@
 """⑨ 평가 지표와 실험.
 
 정답이 있는 비교: ESR(주 지표), MR-STFT, Mel L1, θ 오차(실제 단위)
-정답이 없는 비교: ⑥ 통계 거리, 장기 평균 스펙트럼 대역별 dB 차이 그래프, FAD(mel 특징, 참고용),
-                 청취 평가(MUSHRA 0~100) 집계
+정답이 없는 비교: 통계별 L1 거리(stat_distance), 장기 평균 스펙트럼 대역별 dB 차이 그래프, mel FAD 대체(fad_mel, VGGish 아님, 참고용),
+                 MUSHRA식 청취 평가(0~100 척도만 차용) 집계
 
-실험 1(합성 되찾기): 앰프 계열 5 × 정답 θ 4 = 가짜 곡 20개를 EGDB test DI로 만들고 믹스 증강을 건다.
-조건별로 θ*를 찾고, 가짜 곡에 쓰지 않은 test DI를 정답 G와 결과(G(θ*) 또는 .nam)에 넣어 비교한다.
+실험 1(파라미터 복원 실험): 앰프 계열 5 × 정답 θ 4 = 가짜 곡 20개를 EGDB test DI로 만들고 믹스 처리 증강(augment_mix)을 건다.
+조건별로 θ*를 찾고, 가짜 곡에 쓰지 않은 test DI를 G(θ_true)와 결과(G(θ*) 또는 .nam)에 넣어 비교한다.
 """
 
 from __future__ import annotations
@@ -153,12 +153,16 @@ class Exp1Config:
     eval_clips: int = 4          # 비교용 미사용 test DI 클립 수
     pool_clips: int = 48
     steps: int = 600
-    starts: list = field(default_factory=lambda: ["center", "multi", "encoder"])
+    starts: list = field(default_factory=lambda: ["prior_center", "prior_multi", "encoder"])
     stat_sets: dict = field(default_factory=lambda: {
         "ltas": ("ltas",), "ltas+level": ("ltas", "level"), "all4": STAT_KEYS})
     sessions: list = field(default_factory=lambda: ["none", "correct", "wrong"])
     session_only_baseline: bool = True
     seed: int = 0
+
+
+# 예전 exp1_results.jsonl의 시작점 이름 → 지금 이름
+_OLD_START = {"center": "prior_center", "multi": "prior_multi"}
 
 
 def make_fake_songs(test_reader, cfg: Exp1Config, G: GrayboxAmp, device: str = "cpu"):
@@ -208,7 +212,8 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     res_path = out_dir / "exp1_results.jsonl"
-    done = {(r["song"], r["start"], r["stats"], r["session"]) for r in read_results(res_path)}
+    done = {(r["song"], _OLD_START.get(r["start"], r["start"]), r["stats"], r["session"])
+            for r in read_results(res_path)}
     if res_path.exists() and res_path.stat().st_size and not res_path.read_bytes().endswith(b"\n"):
         with res_path.open("a", encoding="utf-8") as f:   # 반쯤 쓰인 줄에 새 결과가 붙지 않게
             f.write("\n")
@@ -250,16 +255,16 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                         continue
                     if start == "encoder" and theta_hat is None:
                         continue
-                    if start == "center":
+                    if start == "prior_center":
                         starts, names = prior.center[None], ["prior_center"]
-                    elif start == "multi":
+                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 3개
                         starts, names = make_starts(prior, None, 4, rng)
                     else:
                         starts, names = np.asarray(theta_hat)[None], ["encoder"]
                     fc = FitConfig(steps=cfg.steps, seed=cfg.seed)
                     res = fit(target, pool, prior, theta_hat=theta_hat if start == "encoder" else None,
                               cfg=fc, starts=starts, start_names=names, stat_keys=keys)
-                    m = _evaluate_theta(res.theta_best.numpy(), song, G, device)
+                    m = _evaluate_theta(res.theta_star.numpy(), song, G, device)
                     r = {"song": song["id"], "start": start, "stats": stat_name, "session": sess_name,
                          "fit_loss": float(res.losses.min()), **m}
                     record(r)
@@ -303,6 +308,7 @@ def summarize_exp1(results_path: str | Path) -> "object":
 
     rows = read_results(results_path)
     df = pd.DataFrame([{k: v for k, v in r.items() if k != "theta_err"} for r in rows])
+    df["start"] = df["start"].replace(_OLD_START)
     return df.groupby(["session", "stats", "start"])[["esr", "mrstft", "mel_l1", "theta_rmse_norm"]] \
         .agg(["mean", "median"]).round(4)
 

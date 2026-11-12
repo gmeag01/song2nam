@@ -173,7 +173,7 @@ def band_diff_db(pred_ltas: torch.Tensor, target_ltas: torch.Tensor, cfg: StatCo
 
 def describe_residual(bands: dict[str, float], tol_db: float = 2.0) -> list[str]:
     """대역 차이를 사람이 읽을 문장으로 (예: '고역 부족 3.1 dB')."""
-    names = {0: "저역", 1: "중저역", 2: "중고역", 3: "고역"}
+    names = {0: "저역", 1: "중역", 2: "중고역", 3: "고역"}
     msgs = []
     for i, (k, v) in enumerate(bands.items()):
         if abs(v) >= tol_db:

@@ -1,4 +1,4 @@
-"""⑥ 최적화: 같은 DI로 만든 가짜 스템에서 θ 복원.
+"""⑥ 최적화: 같은 DI와 정답 θ로 렌더링한 타깃 스템에서 θ 복원 검사.
 
 CPU에서도 돌도록 3개 차원만 풀고(나머지는 정답으로 고정) 짧은 클립을 쓴다.
 24차원 전체 복원은 실험 1(Colab GPU)에서 확인한다.
@@ -59,7 +59,7 @@ def test_recovers_theta_from_same_di():
     cfg = FitConfig(steps=400, lr=0.05, clips_per_step=len(di), n_prior_samples=2,
                     lambda_prior=0.0, patience=400, eval_clips=len(di))
     res = fit(stem, di, prior, cfg=cfg, G=G)
-    err = {n: abs(float(res.theta_best[INDEX[n]] - theta_true[INDEX[n]])) for n in FREE}
+    err = {n: abs(float(res.theta_star[INDEX[n]] - theta_true[INDEX[n]])) for n in FREE}
     print("θ 복원 오차(0~1):", err, "손실", float(res.losses.min()))
     assert all(e < 0.08 for e in err.values()), err
 
@@ -84,7 +84,7 @@ def test_fit_outputs_and_fixed_dims(tmp_path):
     assert (tmp_path / "candidate_0.wav").exists()
     d = json.loads((tmp_path / "theta_candidates.json").read_text(encoding="utf-8"))
     assert len(d["theta_star"]) == N_PARAMS and d["candidates"]
-    assert torch.allclose(load_theta(tmp_path / "theta_candidates.json"), res.theta_best, atol=1e-4)
+    assert torch.allclose(load_theta(tmp_path / "theta_candidates.json"), res.theta_star, atol=1e-4)
     assert "band_diff_db" in data["diagnostics"]
 
 
@@ -102,4 +102,4 @@ def test_nan_triggers_restart(monkeypatch):
     monkeypatch.setattr(G, "forward", flaky)
     res = fit(di.reshape(-1), di, Prior.full(), cfg=FitConfig(steps=6, clips_per_step=2, n_prior_samples=0), G=G)
     assert res.restarts >= 1
-    assert torch.isfinite(res.theta_best).all()
+    assert torch.isfinite(res.theta_star).all()

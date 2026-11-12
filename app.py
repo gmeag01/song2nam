@@ -1,6 +1,6 @@
 """Gradio 데모 앱 (설계 문서 5장).
 
-화면 흐름: 1. 업로드·분리 → 2. 구간 선택 → 3. 세션 정보 → 4. 톤 찾기 → 5. .nam 생성
+화면 흐름(괄호는 모듈 번호): 1. 업로드·분리(①) → 2. 구간 선택(①) → 3. 세션 정보(②) → 4. 톤 찾기(⑥) → 5. .nam 생성(⑦)
 
     python app.py [--share] [--egdb data/EGDB/audio_DI] [--nam-input data/nam/v3_0_0.wav] [--encoder ...]
 
@@ -29,6 +29,7 @@ ARGS = argparse.Namespace(egdb=os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI
                           nam_input=os.environ.get("AMPCAP_NAM_INPUT", "data/nam/v3_0_0.wav"),
                           encoder=os.environ.get("AMPCAP_ENCODER", str(BEST_PATH)), split_file="data/egdb_split.json")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+SCOPE_KO = {"song": "곡 단위 장비", "usual": "평소 장비"}  # ②-0 출처 범위 표시
 
 
 # ---------------------------------------------------------------- 그림
@@ -46,7 +47,7 @@ def fig_waveform(stem: np.ndarray, sr: int, segments, recommended):
         ax.axvspan(a, b, color="#4caf50", alpha=0.2)
     for a, b in segments or []:
         ax.axvspan(a, b, color="#2196f3", alpha=0.35)
-    ax.set_xlabel("초 (초록: 추천, 파랑: 선택)")
+    ax.set_xlabel("초 (초록: 추천 구간, 파랑: 선택 구간)")
     ax.set_yticks([])
     fig.tight_layout()
     return fig
@@ -136,7 +137,7 @@ def check_segments(target, same_rig, state):
     stem = _stem(state)
     mono, rep = separate.check_and_build(stem, state["segments"], song=state["song"], same_rig=same_rig)
     separate.save_outputs(state["run_dir"], mono, rep)
-    msgs = [separate.GUIDANCE[target], f"연주 길이(무음 제외): {rep.active_sec:.1f}초"]
+    msgs = [separate.GUIDANCE[target], f"유효 연주 길이(무음 제외): {rep.active_sec:.1f}초"]
     if rep.message:
         msgs.append("⛔ " + rep.message)
     mg = separate.multi_guitar_message(rep.warnings)
@@ -166,9 +167,9 @@ def llm_research(link_or_title, state):
     f = draft["fields"]
     lines = [f"{artist} — {song}"]
     for k, v in f.items():
-        lines.append(f"- {k}: {v['value']} (확신도 {v['confidence']:.2f}, {v['scope']}) {v['source'] or ''}")
+        lines.append(f"- {k}: {v['value']} (확신도 {v['confidence']:.2f}, {SCOPE_KO.get(v['scope'], v['scope'])}) {v['source'] or ''}")
     if draft.get("problems"):
-        lines.append("검증 문제: " + "; ".join(draft["problems"]))
+        lines.append("스키마 검증 문제: " + "; ".join(draft["problems"]))
     vals = [f[k]["value"] for k in ("guitar.pickup", "amp.family", "amp.gain", "cab.size", "boost")]
     return "\n".join(lines), *vals, f["amp.model"]["value"], state
 
@@ -244,9 +245,9 @@ def find_tone(steps, state):
     res = box["res"]
     save_result(res, rd, di_pool=pool.cpu(), target_rms=float(np.sqrt(np.mean(stem ** 2))))
     cands = [str(rd / f"candidate_{k}.wav") for k in range(len(res.candidates))]
-    diag = "\n".join(res.diagnostics["messages"]) or "통계 잔여 차이 작음"
+    diag = "\n".join(res.diagnostics["messages"]) or "대역별 잔차 모두 2 dB 미만"
     state["n_candidates"] = len(cands)
-    yield (fig_curve(res.curve), fig_theta(res.theta_best), cands[0] if cands else None,
+    yield (fig_curve(res.curve), fig_theta(res.theta_star), cands[0] if cands else None,
            cands[1] if len(cands) > 1 else None, f"θ* 손실 {float(res.losses.min()):.4f}\n{diag}", state)
 
 
@@ -293,7 +294,7 @@ def build():
             load_btn = gr.Button("불러오기")
             load_msg = gr.Textbox(label="결과", lines=6)
 
-        with gr.Tab("1. 업로드·분리"):
+        with gr.Tab("1. 업로드·분리 (①)"):
             audio = gr.Audio(type="filepath", label="음원 파일")
             song_name = gr.Textbox(label="곡 이름(선택)")
             sep_btn = gr.Button("기타 분리 (Demucs htdemucs_6s)")
@@ -302,9 +303,9 @@ def build():
             rec_txt = gr.Textbox(label="추천 구간 [[시작, 끝], ...]")
             sep_msg = gr.Markdown()
 
-        with gr.Tab("2. 구간 선택"):
+        with gr.Tab("2. 구간 선택 (①)"):
             target = gr.Radio(["rhythm", "lead"], value="rhythm", label="capture_target")
-            same_rig = gr.Checkbox(True, label="same_rig (여러 기타가 같은 장비)")
+            same_rig = gr.Checkbox(True, label="same_rig (모든 기타 트랙이 같은 기타·앰프 구성)")
             with gr.Row():
                 seg_s = gr.Number(label="시작(초)")
                 seg_e = gr.Number(label="끝(초)")
@@ -318,7 +319,7 @@ def build():
             chk_btn = gr.Button("점검하고 저장")
             chk_msg = gr.Textbox(label="점검 결과", lines=4)
 
-        with gr.Tab("3. 세션 정보"):
+        with gr.Tab("3. 세션 정보 (②)"):
             link = gr.Textbox(label="곡 링크 또는 '아티스트 - 곡명' (LLM 조사, 선택)")
             llm_btn = gr.Button("LLM 장비 조사")
             llm_msg = gr.Textbox(label="조사 초안 (출처·확신도)", lines=8)
@@ -332,9 +333,9 @@ def build():
                 model = gr.Textbox(label="앰프 모델(자유 텍스트)")
             sess_btn = gr.Button("확인·저장")
             sess_msg = gr.Markdown()
-            prior_fig = gr.Plot(label="사전분포 중심 θ")
+            prior_fig = gr.Plot(label="사전 범위 중심 θ")
 
-        with gr.Tab("4. 톤 찾기"):
+        with gr.Tab("4. 톤 찾기 (⑥)"):
             steps = gr.Slider(100, 2000, value=800, step=50, label="최적화 스텝")
             fit_btn = gr.Button("톤 찾기 (⑥)")
             curve = gr.Plot(label="손실 곡선")
@@ -344,14 +345,14 @@ def build():
                 cand_b = gr.Audio(label="후보 B")
             theta_fig = gr.Plot(label="θ: 앰프 노브와 블록별 주파수 응답")
 
-        with gr.Tab("5. .nam 생성"):
+        with gr.Tab("5. .nam 생성 (⑦)"):
             rank = gr.Number(0, label="후보 번호 (0 = θ*)", precision=0)
             epochs = gr.Slider(10, 300, value=100, step=10, label="NAM 학습 epoch")
             nam_btn = gr.Button(".nam 생성 (⑦)")
             nam_file = gr.File(label="model.nam")
             nam_msg = gr.Textbox(label="입력 레벨·검증(ESR)", lines=8)
             gr.Markdown("생성된 .nam에는 캐비닛이 포함됩니다. NAM 플러그인의 IR 로더를 끄고, "
-                        "DI 트랙 게인은 input_level의 기준에 맞추세요.")
+                        "DI 트랙의 연주 RMS를 input_level.json의 di_ref_rms_dbfs에 맞추세요.")
 
         load_btn.click(load_run, [run_in, state], [load_msg, theta_fig, state])
         sep_btn.click(do_separate, [audio, song_name, state], [wave, stem_audio, rec_txt, state, sep_msg])

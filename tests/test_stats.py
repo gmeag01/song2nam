@@ -34,7 +34,7 @@ def _plucks(levels_db=(-40, -28, -16, -4), note_sec=0.5, repeats=3, seed=0):
     return torch.tensor(np.concatenate(out), dtype=torch.float32)
 
 
-# 저게인·저레벨 기준 설정: 파워앰프·부스터도 거의 선형으로 동작하게
+# 저게인·저레벨 기준 설정: 파워앰프·부스트도 거의 선형으로 동작하게
 BASE = dict(in_gain_db=-12.0, pre1_gain_db=0.0, pre2_gain_db=0.0, pa_drive_db=0.0,
             boost_drive_db=0.0, ts_treble_db=0.0, cab_lp_hz=7000.0, pre1_lp_hz=12000.0, pre2_lp_hz=12000.0)
 

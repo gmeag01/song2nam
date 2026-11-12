@@ -20,7 +20,7 @@ def test_overfits_small_batch():
     B, T = 4, SR // 2
     batch = {
         "y_aug": torch.randn(B, T) * 0.1,
-        "session": torch.rand(B, SESSION_DIM),
+        "session_vec": torch.rand(B, SESSION_DIM),
         "theta": torch.rand(B, N_PARAMS),
     }
     opt = torch.optim.Adam(model.parameters(), lr=3e-3)
@@ -34,7 +34,7 @@ def test_overfits_small_batch():
         first = first if first is not None else float(loss)
     model.eval()
     with torch.no_grad():
-        final = float((model(batch["y_aug"], batch["session"]) - batch["theta"]).square().mean())
+        final = float((model(batch["y_aug"], batch["session_vec"]) - batch["theta"]).square().mean())
     print("θ MSE", first, "→", final)
     assert final < 1e-3
 
@@ -47,7 +47,7 @@ def test_loss_with_mrstft_is_differentiable():
     with torch.no_grad():
         y = G(x, th)
         y = y / y.square().mean(-1, keepdim=True).sqrt() * 0.1
-    batch = {"x": x, "y": y, "y_aug": y, "session": torch.rand(2, SESSION_DIM), "theta": th}
+    batch = {"x": x, "y": y, "y_aug": y, "session_vec": torch.rand(2, SESSION_DIM), "theta": th}
     loss, parts, _ = encoder_loss(model, batch, G=G, w_mrstft=0.1)
     loss.backward()
     assert "mrstft" in parts and torch.isfinite(loss)

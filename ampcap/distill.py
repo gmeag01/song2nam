@@ -1,14 +1,15 @@
 """⑦ .nam 증류.
 
 1. θ*를 G에 고정하고 lfilter + 2배 오버샘플링으로 렌더링한다.
-2. NAM 표준 학습 입력(v3_0_0.wav 등)을 G에 통과시켜 output.wav를 만든다.
-   입력은 ⑥ DI 풀과 같은 음량(RMS)으로 맞춰 G에 넣고, 그 배율을 "입력 레벨"로 기록한다.
+2. NAM 학습 입력 신호 v3.0.0(`input.wav`, 커뮤니티 표기 v3_0_0.wav)을 G에 통과시켜 output.wav를 만든다.
+   입력은 DI 기준 음량(RMS)으로 맞춰 G에 넣고, 그 배율을 "입력 레벨"(디지털 배율, dBu 아님)로 기록한다.
    출력은 클리핑되지 않게 피크를 맞춘다.
 3. neural-amp-modeler로 학습한다(지연 보정 0).
-4. .nam 메타데이터에 이름, 장비 정보, "음원에서 생성됨"을 기록한다.
+4. .nam 메타데이터에 이름, 세션 정보, "음원에서 생성됨"을 기록한다(modeled_by와 metadata.ampcap).
+   input_level_dbu/output_level_dbu는 하드웨어 dBu 값이라 비워 둔다.
 5. 학습에 쓰지 않은 DI로 G와 .nam을 비교한다(ESR).
 
-NAM 표준 입력 파일은 저장소에 넣지 않는다. NAM 문서의 링크에서 받아 data/nam/에 둔다.
+NAM 학습 입력 신호 파일은 저장소에 넣지 않는다. NAM 문서의 링크에서 받아 data/nam/에 둔다.
 """
 
 from __future__ import annotations
@@ -46,9 +47,9 @@ def active_rms(x: np.ndarray, silence_db: float = -50.0) -> float:
 def render_nam_output(theta: torch.Tensor, nam_input_path: str | Path, out_dir: str | Path,
                       di_ref_rms: float, device: str | None = None,
                       G: GrayboxAmp | None = None) -> dict:
-    """NAM 표준 입력 → G(θ*) → output.wav. 반환: 입력 레벨 정보.
+    """NAM 학습 입력 신호 → G(θ*) → output.wav. 반환: 입력 레벨 정보.
 
-    di_ref_rms: ⑥에서 쓴 DI 풀의 연주 RMS. NAM 입력을 이 RMS로 맞춰 G에 넣는다.
+    di_ref_rms: DI 기준 음량(`DI_REF_RMS`, ④⑥⑦ 공통). NAM 입력을 이 RMS로 맞춰 G에 넣는다.
     사용자는 DAW에서 DI 트랙을 같은 기준(input_gain_db)으로 맞춘다.
     """
     import soundfile as sf
@@ -119,8 +120,16 @@ def train_nam(input_path: str | Path, output_path: str | Path, train_dir: str | 
     )
     model = getattr(out, "model", out)
     if model is None:
-        raise RuntimeError("NAM 학습 실패(체크 통과 못함). train_dir 로그를 확인하세요.")
+        raise RuntimeError("NAM 학습 실패(NAM 입력·출력 데이터 검사 통과 못함). train_dir 로그를 확인하세요.")
     return model
+
+
+def gear_type_for(session: dict | None):
+    """캐비닛은 늘 포함, 부스트가 있으면 페달까지 포함."""
+    from nam.models.metadata import GearType
+
+    boost = (session or {}).get("boost")
+    return GearType.AMP_PEDAL_CAB if boost == "tube_screamer" else GearType.AMP_CAB
 
 
 def export_nam(model, out_dir: str | Path, name: str, session: dict | None, theta: torch.Tensor,
@@ -135,7 +144,7 @@ def export_nam(model, out_dir: str | Path, name: str, session: dict | None, thet
         gain = (session or {}).get("amp", {}).get("gain", "unknown")
         tone = {"low": ToneType.CLEAN, "mid": ToneType.CRUNCH, "high": ToneType.HI_GAIN}.get(gain)
         kw["user_metadata"] = UserMetadata(
-            name=name, modeled_by="ampcap (음원에서 생성됨)", gear_type=GearType.AMP_CAB,
+            name=name, modeled_by="ampcap (음원에서 생성됨)", gear_type=gear_type_for(session),
             gear_make=None, gear_model=(session or {}).get("amp", {}).get("model"), tone_type=tone)
     except Exception:
         pass
@@ -189,13 +198,13 @@ def verify(theta: torch.Tensor, net, di_clips: list[np.ndarray], input_gain_db: 
            output_gain_db: float, device: str = "cpu", G: GrayboxAmp | None = None) -> dict:
     """학습에 쓰지 않은 DI로 G(θ*)와 .nam 출력 비교.
 
-    DI는 NAM 입력 기준 레벨(= di_ref / 10^(input_gain_db/20))로 넣는다.
+    DI는 입력 레벨(`input_gain_db`)을 되돌린 크기(= di_ref / 10^(input_gain_db/20))로 넣는다.
     """
     G = (G or GrayboxAmp()).to(device)
     gi, go = 10 ** (input_gain_db / 20), 10 ** (output_gain_db / 20)
     vals = []
     for di in di_clips:
-        x_nam = di / gi                 # NAM 입력 기준 레벨의 DI
+        x_nam = di / gi                 # 입력 레벨을 되돌린 DI
         y_g = G.render(torch.from_numpy(di.astype(np.float32)).to(device)[None],
                        theta.reshape(1, -1).float().to(device))[0].cpu().numpy() * go
         y_n = run_nam(net, x_nam, device)

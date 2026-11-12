@@ -1,4 +1,4 @@
-"""② 세션 스키마 검증, 대응표, 사전분포, 세션 벡터.
+"""② 세션 스키마 검증, 대응표, 사전 범위, 세션 벡터.
 
 대응표 값은 일반적으로 알려진 앰프 계열별 특징을 바탕으로 한 초기 가정이다(설계 문서 4.3).
 대표 설정을 G로 렌더링해 들어 보고 `MAPPING`을 조정한다.
@@ -21,7 +21,7 @@ PICKUPS = ["single", "p90", "humbucker"]
 FAMILIES = ["fender", "vox", "british", "american_hg", "modern_hg"]
 GAINS = ["low", "mid", "high"]
 CABS = ["1x12", "2x12", "4x12"]
-BOOSTS = ["none", "ts"]
+BOOSTS = ["none", "tube_screamer"]  # tube_screamer: Tube Screamer 계열 오버드라이브
 TARGETS = ["rhythm", "lead"]
 
 # 세션 벡터 순서: 픽업 4, 앰프 계열 6, 게인 4, 캐비닛 4, 부스트 3 = 21
@@ -105,6 +105,9 @@ def validate(session: dict) -> dict:
         guess = model_to_family(_get(s, "amp.model"))
         if guess:
             _set(s, "amp.family", guess)
+
+    if s.get("boost") == "ts":  # 예전 session.json 호환 (톤스택 θ 접두사 ts_와 겹쳐 이름을 바꿈)
+        s["boost"] = "tube_screamer"
 
     for path, opts, _ in FIELDS:
         v = _get(s, path)
@@ -198,13 +201,14 @@ MAPPING: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
         # none: 드라이브 0 고정, 미드 0, 레벨 0dB
         "none": {"boost_drive_db": (0.0, 0.0), "boost_mid_db": (0.0, 0.0),
                  "boost_level_db": (0.5, 0.5)},
-        "ts": {"boost_mid_hz": _u("boost_mid_hz", 600, 900), "boost_mid_db": _u("boost_mid_db", 4, 12),
-               "boost_drive_db": _u("boost_drive_db", 0, 18), "boost_level_db": _u("boost_level_db", 0, 10)},
+        "tube_screamer": {"boost_mid_hz": _u("boost_mid_hz", 600, 900), "boost_mid_db": _u("boost_mid_db", 4, 12),
+                         "boost_drive_db": _u("boost_drive_db", 0, 18), "boost_level_db": _u("boost_level_db", 0, 10)},
     },
 }
 
 
-# ---------------------------------------------------------------- 사전분포
+# ---------------------------------------------------------------- 사전 범위
+# Prior는 확률분포가 아니라 차원별 [lo, hi]와 중심값이다. ④에서만 이 범위에서 균등하게 뽑는다.
 
 
 @dataclass
@@ -297,7 +301,7 @@ def random_session(rng: np.random.Generator, p_unknown: float = 0.0) -> dict:
 
 def dropout_session(session: dict, rng: np.random.Generator, p_unknown: float = 0.3,
                     p_lower_conf: float = 0.3) -> dict:
-    """세션 벡터 드롭아웃: 필드를 일정 확률로 unknown, confidence를 무작위로 낮춤."""
+    """조건 드롭아웃(필드를 일정 확률로 unknown으로 가림)과 confidence 증강(무작위로 낮춤)."""
     s = validate(session)
     for path, _, ckey in FIELDS:
         if rng.random() < p_unknown:

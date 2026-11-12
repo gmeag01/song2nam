@@ -3,8 +3,8 @@
 θ는 24차원, 0~1 정규화 벡터다(설계 문서 4.4). 블록 안에서 실제 단위로 바꾼다.
 주파수("log")는 로그 스케일, 게인·기타("lin")는 선형 스케일로 변환한다.
 
-설계 문서에 범위가 적혀 있지 않은 파라미터(부스터 레벨, 비대칭, 톤스택 미드 주파수,
-프레즌스, 캐비닛 하이패스·공진·노치)는 아래 표의 값을 초기 가정으로 쓴다.
+설계 문서에 범위가 적혀 있지 않은 파라미터(부스트 출력 레벨, 클리핑 비대칭(DC 바이어스), 톤스택 미드 주파수,
+프레즌스, 캐비닛 하이패스·공진·딥)는 아래 표의 값을 초기 가정으로 쓴다.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ PARAMS: list[tuple[str, str, float, float]] = [
     # 입력단 (2)
     ("in_hp_hz", "log", 40.0, 200.0),
     ("in_gain_db", "lin", -12.0, 12.0),
-    # 부스터/OD (4)
+    # 부스트(오버드라이브) (4)
     ("boost_mid_hz", "log", 500.0, 1500.0),
     ("boost_mid_db", "lin", 0.0, 12.0),
     ("boost_drive_db", "lin", 0.0, 30.0),
@@ -98,7 +98,7 @@ def normalize_value(name: str, value: float) -> float:
 
 
 def theta_from_units(values: dict[str, float], base: torch.Tensor | None = None) -> torch.Tensor:
-    """일부 파라미터를 실제 단위로 지정해 θ (24,)를 만든다. 나머지는 base(기본 중립값)."""
+    """일부 파라미터를 실제 단위로 지정해 θ (24,)를 만든다. 나머지는 base(중립 θ, neutral_theta)."""
     theta = neutral_theta() if base is None else base.clone()
     for name, v in values.items():
         theta[INDEX[name]] = normalize_value(name, v)
@@ -145,7 +145,7 @@ class GrayboxAmp(nn.Module):
       x:     (B, T) 48kHz 모노
       theta: (B, 24) 또는 (24,) ∈ [0,1]
       mode:  "fft"(학습, 주파수 영역 FIR 근사) / "iir"(lfilter, ⑦ 렌더링·검증)
-      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(⑥ 미세조정, ⑦ 최종 렌더링).
+      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(⑥ 곡별 파라미터 최적화, ⑦ 최종 렌더링).
       target_rms: 지정하면 출력 RMS를 이 값으로 맞춘다(스템 RMS 정규화). 스칼라 또는 (B,).
       bypass: 건너뛸 블록 이름 집합(시각화·테스트용).
     """

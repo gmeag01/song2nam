@@ -38,7 +38,7 @@ def test_nam_loader_and_metadata():
     from nam.models.metadata import GearType, ToneType, UserMetadata
 
     assert {"name", "modeled_by", "gear_type", "gear_model", "tone_type"} <= _params(UserMetadata)
-    GearType.AMP_CAB, ToneType.CLEAN, ToneType.CRUNCH, ToneType.HI_GAIN  # noqa: B018
+    GearType.AMP_CAB, GearType.AMP_PEDAL_CAB, ToneType.CLEAN, ToneType.CRUNCH, ToneType.HI_GAIN  # noqa: B018
 
 
 def test_demucs_api():

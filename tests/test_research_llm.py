@@ -13,7 +13,7 @@ GOOD = {
         "amp.model": {"value": "JCM800", "source": "https://ex.com/2", "scope": "song", "confidence": 0.8},
         "amp.gain": {"value": "high", "source": "https://ex.com/3", "scope": "usual", "confidence": 0.9},
         "cab.size": {"value": "4x12", "source": None, "scope": "song", "confidence": 0.9},
-        "boost": {"value": "ts", "source": "https://ex.com/4", "scope": "song", "confidence": 0.7},
+        "boost": {"value": "tube_screamer", "source": "https://ex.com/4", "scope": "song", "confidence": 0.7},
     },
 }
 

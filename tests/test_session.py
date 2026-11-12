@@ -94,11 +94,17 @@ def test_design_doc_example_validates():
         "artist": "...", "song": "...", "capture_target": "rhythm", "same_rig": True,
         "guitar": {"pickup": "humbucker"},
         "amp": {"family": "british", "model": "JCM800", "gain": "high"},
-        "cab": {"size": "4x12"}, "boost": "ts",
+        "cab": {"size": "4x12"}, "boost": "tube_screamer",
         "confidence": {"amp": 1.0, "boost": 0.5},
     }
     p = S.compute_prior(s)
     assert p.lo.shape == (N_PARAMS,) and np.all(p.lo <= p.hi)
+
+
+def test_old_ts_boost_alias():
+    # 예전 session.json의 "ts"는 tube_screamer로 읽는다
+    assert S.validate({"boost": "ts"})["boost"] == "tube_screamer"
+    assert np.array_equal(S.session_vector({"boost": "ts"}), S.session_vector({"boost": "tube_screamer"}))
 
 
 def test_random_and_dropout_sessions_are_valid():
