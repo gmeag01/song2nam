@@ -27,9 +27,17 @@ lightning_logs/
 # 배포용 최종 인코더 가중치만 커밋
 !checkpoints/encoder_*_best.pt
 
-# 실행 기록: 시연용은 오디오 외 파일만 git add -f 로 골라서 추가
+# 실행 기록(runs/)은 분석·시각 자료에 쓰는 수치 파일만 커밋한다
 runs/*
 !runs/.gitkeep
+!runs/*/
+runs/*/*
+!runs/*/exp1_results.jsonl
+!runs/*/history.json
+!runs/*/status.json
+!runs/*/session.json
+!runs/*/theta_candidates.json
+!runs/*/distill.json
 
 # 비밀값
 .env
