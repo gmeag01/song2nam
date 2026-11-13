@@ -57,7 +57,7 @@ def test_recovers_theta_from_same_di():
     prior = _prior_fixing_all_but(theta_true, FREE)
 
     cfg = FitConfig(steps=400, lr=0.05, clips_per_step=len(di), n_prior_samples=2,
-                    lambda_prior=0.0, patience=400, eval_clips=len(di))
+                    lambda_prior=0.0, patience=400, eval_clips=len(di), lambda_anchor=0.0)
     res = fit(stem, di, prior, cfg=cfg, G=G)
     err = {n: abs(float(res.theta_star[INDEX[n]] - theta_true[INDEX[n]])) for n in FREE}
     print("θ 복원 오차(0~1):", err, "손실", float(res.losses.min()))
@@ -119,7 +119,39 @@ def test_theta_star_uses_shared_reference_across_starts():
     prior = _prior_fixing_all_but(theta_true, FREE)
     starts = torch.stack([far, theta_true]).double().numpy()
     cfg = FitConfig(steps=15, lr=0.05, clips_per_step=len(di), lambda_prior=0.0, patience=100,
-                    eval_clips=len(di))
+                    eval_clips=len(di), lambda_anchor=0.0)
     res = fit(stem, di, prior, cfg=cfg, G=G, starts=starts, start_names=["far", "true"])
     assert res.start_names[int(torch.argmin(res.losses))] == "true", res.losses
     assert torch.allclose(res.theta_star, res.thetas[1])
+
+
+def test_exchangeable_gains_stay_at_start():
+    """in_gain·boost_level은 시작점 값에 고정, boost=none(boost_drive 고정)이면 in_gain은 푼다."""
+    from ampcap.optimize import exchangeable_mask
+
+    di = _di_clips(n=2, sec=0.5)
+    G = GrayboxAmp()
+    stem = (G(di, theta_from_units({"pre1_gain_db": 30.0}).expand(2, -1)).reshape(-1)).detach()
+    start = np.full((1, N_PARAMS), 0.3)
+    res = fit(stem, di, Prior.full(), cfg=FitConfig(steps=5, clips_per_step=2, lr=0.2), G=G,
+              starts=start, start_names=["s"])
+    for n in ("in_gain_db", "boost_level_db"):
+        assert abs(float(res.thetas[0, INDEX[n]]) - 0.3) < 1e-5
+    assert abs(float(res.thetas[0, INDEX["boost_drive_db"]]) - 0.3) > 1e-4
+    assert set(res.diagnostics["frozen"]) == {"in_gain_db", "boost_level_db"}
+
+    fixed = torch.zeros(N_PARAMS, dtype=torch.bool)
+    fixed[INDEX["boost_drive_db"]] = fixed[INDEX["boost_level_db"]] = True
+    m = exchangeable_mask(fixed)
+    assert not m[INDEX["in_gain_db"]] and not m[INDEX["boost_level_db"]]
+
+
+def test_min_move_selection_prefers_encoder_on_tie():
+    di = _di_clips(n=2, sec=0.5)
+    G = GrayboxAmp()
+    th = theta_from_units({"pre1_gain_db": 20.0})
+    stem = G(di, th.expand(2, -1)).reshape(-1).detach()
+    starts = th.expand(2, -1).double().numpy()
+    res = fit(stem, di, Prior.full(), cfg=FitConfig(steps=0, eval_clips=2), G=G,
+              starts=starts, start_names=["prior_center", "encoder"])
+    assert res.candidates[0] == 1 and torch.allclose(res.theta_star, res.thetas[1])

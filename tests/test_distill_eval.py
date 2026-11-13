@@ -198,7 +198,7 @@ def test_exp1_prior_multi_starts_reproducible_on_resume(tmp_path, monkeypatch):
     class Res:
         theta_star = torch.full((N_PARAMS,), 0.5)
         losses = torch.zeros(1)
-        diagnostics = {"steps": 0, "terms": {}}
+        diagnostics = {"steps": 0, "terms": {}, "move": 0.0}
 
     def fake_fit(target, pool, prior, starts=None, **kw):
         seen.setdefault("calls", []).append(np.array(starts))
@@ -223,3 +223,32 @@ def test_exp1_prior_multi_starts_reproducible_on_resume(tmp_path, monkeypatch):
         np.testing.assert_array_equal(a, b)
     row = E.read_results(tmp_path / "a" / "exp1_results.jsonl")[0]
     assert {"theta_star", "steps", "terms"} <= set(row) and len(row["theta_star"]) == N_PARAMS
+
+
+def test_gain_sum_error_ignores_exchange():
+    from ampcap.evaluate import gain_sum_error
+
+    a = theta_from_units({"in_gain_db": 3.0, "boost_drive_db": 10.0, "boost_level_db": 0.0, "pre1_gain_db": 20.0})
+    b = theta_from_units({"in_gain_db": 0.0, "boost_drive_db": 13.0, "boost_level_db": 4.0, "pre1_gain_db": 16.0})
+    e = gain_sum_error(a, b)
+    assert e["in+boost_drive"] < 1e-6 and e["boost_level+pre1"] < 1e-6 and e["total"] < 1e-6
+
+
+def test_stat_sensitivity_sees_gain_exchange_as_flat():
+    """in_gain +1 dB / boost_drive −1 dB 방향은 사이에 선형 블록만 있어 통계가 변하지 않아야 한다."""
+    from ampcap.evaluate import stat_sensitivity
+    from ampcap.graybox.amp import INDEX, PARAMS
+    from ampcap.stats import StatConfig, Stats
+
+    rng = np.random.default_rng(0)
+    di = torch.tensor(rng.standard_normal((1, 4800)) * 0.05, dtype=torch.float32)
+    th = theta_from_units({"boost_drive_db": 15.0, "pre1_gain_db": 20.0})
+    out = stat_sensitivity(th, di, stats=Stats(StatConfig(n_mels=16)))
+    J = torch.as_tensor(out["jacobian"], dtype=torch.float64)
+    span = {n: hi - lo for n, _, lo, hi in PARAMS}
+    v = torch.zeros(N_PARAMS, dtype=torch.float64)
+    v[INDEX["in_gain_db"]], v[INDEX["boost_drive_db"]] = 1 / span["in_gain_db"], -1 / span["boost_drive_db"]
+    e = torch.zeros(N_PARAMS, dtype=torch.float64)
+    e[INDEX["in_gain_db"]] = 1 / span["in_gain_db"]
+    assert (J @ v).norm() < 0.05 * (J @ e).norm()
+    assert out["eigvals"].min() > -1e-6 and len(out["weak"]) == 3

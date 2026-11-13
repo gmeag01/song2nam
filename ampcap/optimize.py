@@ -6,8 +6,11 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템)) / (시작점 손�
        최종 θ* 선택은 모든 시작점이 같은 기준(고정 평가 클립에서 시작점 평균 손실)으로 나눈 값으로 한다
      + λ_prior · (사전 범위를 벗어난 거리)²
      + λ_enc · ‖θ − θ̂‖²
+     + λ_anchor · Σ_드라이브 ((θ − θ₀) / σ)²        ← 드라이브 앵커(θ₀ = 그 시작점)
 
 θ = sigmoid(u), u를 Adam으로 최적화한다. 시작점 여러 개를 한 배치로 병렬 최적화한다.
+교환 게인(in_gain, boost_level)은 시작점 값에 고정한다(설계 4.7 게인 식별). θ*는 손실이 최소의
+(1 + select_eps) 안에 드는 시작점 중 시작점에서 가장 덜 움직인 것이다(최소 이동 선택).
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .graybox.amp import NAMES, GrayboxAmp, theta_to_units_dict
+from .graybox.amp import INDEX, NAMES, GrayboxAmp, theta_to_units_dict
 from .session import Prior
 from .stats import STAT_KEYS, Stats, band_diff_db, describe_residual, stat_losses
 
@@ -41,11 +44,16 @@ class FitConfig:
     dedupe_dist: float = 0.08    # 후보 중복 제거 θ 거리 (RMS, 0~1 단위)
     n_candidates: int = 4
     seed: int = 0
+    freeze_exchangeable: bool = True   # 교환 게인 고정
+    lambda_anchor: float = 0.1         # 드라이브 앵커 세기
+    # shortcut: 드라이브 4개 공통 σ(정규화 단위, 0.1 ≈ 3~4 dB). 인코더 파라미터별 검증 RMSE를 저장하게 되면 그 값으로 바꾼다
+    anchor_sigma: float = 0.1
+    select_eps: float = 0.02           # 최소 이동 선택에서 '손실이 같다'로 보는 비율
 
 
 @dataclass
 class FitResult:
-    theta_star: torch.Tensor           # (24,) θ* = 후보 0
+    theta_star: torch.Tensor           # (24,) θ* = 후보 0 (최소 이동 선택)
     thetas: torch.Tensor               # (S, 24) 시작점별 최종 θ
     losses: torch.Tensor               # (S,) 고정 클립 평가 손실(시작점 공통 기준으로 정규화)
     start_names: list[str]
@@ -58,6 +66,20 @@ class FitResult:
 def _logit(p: torch.Tensor) -> torch.Tensor:
     p = p.clamp(1e-4, 1 - 1e-4)
     return torch.log(p) - torch.log1p(-p)
+
+
+# 사이에 선형 블록만 있어 dB 합만 출력에 남는 게인 쌍(앞쪽, 뒤쪽). 뒤쪽이 자유로울 때만 앞쪽을 고정한다.
+# boost=none이면 boost_drive가 고정이라 in_gain이 첫 tanh의 유일한 드라이브가 되므로 풀어 둔다.
+EXCHANGEABLE = [("in_gain_db", "boost_drive_db"), ("boost_level_db", "pre1_gain_db")]
+DRIVES = ["boost_drive_db", "pre1_gain_db", "pre2_gain_db", "pa_drive_db"]   # 비선형 4곳의 입력 게인
+
+
+def exchangeable_mask(fixed: torch.Tensor) -> torch.Tensor:
+    m = torch.zeros_like(fixed)
+    for a, b in EXCHANGEABLE:
+        if not bool(fixed[INDEX[b]]):
+            m[INDEX[a]] = True
+    return m & ~fixed
 
 
 def prior_penalty(theta: torch.Tensor, lo: torch.Tensor, hi: torch.Tensor) -> torch.Tensor:
@@ -117,9 +139,13 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
     fixed = torch.as_tensor(prior.fixed, device=dev)
     fixed_val = lo.clone()
     th_hat = None if theta_hat is None else torch.as_tensor(theta_hat, dtype=torch.float32, device=dev)
+    u0 = _logit(torch.as_tensor(starts, dtype=torch.float32, device=dev))
+    th0 = torch.where(fixed, fixed_val.expand_as(u0), torch.sigmoid(u0))       # (S, 24) 시작점
+    freeze = exchangeable_mask(fixed) if cfg.freeze_exchangeable else torch.zeros_like(fixed)
+    drive = torch.tensor([INDEX[n] for n in DRIVES], device=dev)
 
     def theta_of(u):
-        th = torch.sigmoid(u)
+        th = torch.where(freeze, th0, torch.sigmoid(u))
         return torch.where(fixed, fixed_val.expand_as(th), th)
 
     def losses_for(th, clips, norm=None):
@@ -140,9 +166,11 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         total = total + cfg.lambda_prior * prior_penalty(th, lo, hi)
         if th_hat is not None and cfg.lambda_enc > 0:
             total = total + cfg.lambda_enc * (th - th_hat).square().sum(-1)
+        if cfg.lambda_anchor > 0:
+            total = total + cfg.lambda_anchor * ((th - th0)[:, drive] / cfg.anchor_sigma).square().sum(-1)
         return total
 
-    u = _logit(torch.as_tensor(starts, dtype=torch.float32, device=dev)).requires_grad_(True)
+    u = u0.clone().requires_grad_(True)
     lr = cfg.lr
     opt = torch.optim.Adam([u], lr=lr)
 
@@ -200,7 +228,12 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         ref = finite.nanmean(0, keepdim=True).nan_to_num(1.0).clamp_min(1e-6)
         total = torch.nan_to_num(combine(th_final, terms, ref), nan=float("inf"))
 
-    order = torch.argsort(total).tolist()
+    # 최소 이동 선택: 손실이 거의 같으면 시작점에서 덜 움직인 쪽(평평한 방향으로 흘러간 θ를 피한다), 같으면 인코더
+    move = (th_final - th0).square().mean(-1).sqrt()
+    lim = total.min() * (1 + cfg.select_eps)
+    near = [i for i in range(S) if total[i] <= lim]
+    best = min(near, key=lambda i: (round(float(move[i]), 3), start_names[i] != "encoder"))
+    order = [best] + [i for i in torch.argsort(total).tolist() if i != best]
     cands = []
     for i in order:
         if all(((th_final[i] - th_final[j]).square().mean().sqrt() > cfg.dedupe_dist) for j in cands):
@@ -208,7 +241,6 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         if len(cands) >= cfg.n_candidates:
             break
 
-    best = order[0]
     bands = band_diff_db(st["ltas"][best], tgt["ltas"][0], stats.cfg)
     diagnostics = {
         "terms": {k: float(terms[best, i]) for i, k in enumerate(stat_keys)},
@@ -216,6 +248,7 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         "messages": describe_residual(bands),
         "prior_violation": float(prior_penalty(th_final[best], lo, hi)),
         "steps": step, "lr_final": lr,
+        "move": float(move[best]), "frozen": [NAMES[i] for i in torch.nonzero(freeze).flatten().tolist()],
     }
     return FitResult(theta_star=th_final[best].cpu(), thetas=th_final.cpu(), losses=total.cpu(),
                      start_names=start_names, curve=curve, candidates=cands,
