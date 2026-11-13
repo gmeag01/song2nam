@@ -150,8 +150,8 @@
 |---|---|---|
 | `capture_target` | rhythm / lead | ① 안내 문구 |
 | `same_rig` | true / false | ① 여러 기타 혼입 경고를 참고 문구로 낮출지 |
-| `guitar.pickup` | single / p90 / humbucker / unknown | 입력 게인, 입력 하이패스 |
-| `amp.family` | fender / vox / british / american_hg / modern_hg / unknown | 프리앰프 게인, 톤스택, 파워앰프 |
+| `guitar.pickup` | single / p90 / humbucker / unknown | 입력 게인 |
+| `amp.family` | fender / vox / british / american_hg / modern_hg / unknown | 입력 하이패스, 프리앰프 게인·바이어스, 톤스택, 파워앰프 |
 |  | fender: Fender 계열 클린, vox: Vox AC 계열, british: Marshall·Orange 계열, american_hg: Mesa·5150·Soldano 계열 미국 하이게인, modern_hg: Diezel·ENGL·Friedman 계열 모던 하이게인 | |
 | `amp.gain` | low / mid / high / unknown | 프리앰프 게인 범위 |
 | `amp.model` | 자유 텍스트 | 기록용. 알려진 모델명은 family로 변환 |
@@ -159,14 +159,14 @@
 | `boost` | none / tube_screamer / unknown | 부스트 블록 (none이면 드라이브 0 고정). tube_screamer는 Tube Screamer 계열 오버드라이브. 예전 값 `ts`도 읽는다 |
 | `confidence` | 필드별 0~1, 기본 1.0 | 범위를 좁히는 정도 |
 
-**대응표**: 세션 값별로 θ의 어느 차원을 어느 범위로 좁히는지 적은 표. 앰프 계열 5개, 게인 3단계, 캐비닛 3종, 픽업 3종, 부스트 2종. 값은 일반적으로 알려진 앰프 계열별 특징을 바탕으로 한 초기 가정이며, 대표 설정을 G로 렌더링해 들어 보고 조정한다.
+**대응표**: 세션 값별로 θ의 어느 차원을 어느 범위로 좁히는지 적은 표. 앰프 계열 5개, 게인 3단계, 캐비닛 3종, 픽업 3종, 부스트 2종. 지금 값은 회로·측정 자료로 다시 검증한 v2(2026-11-12)다. 근거가 약하거나 확인할 수 없는 칸이 남아 있다. v2는 모든 앰프 계열에서 `ts_mid_db` 상한을 0dB 이하로 두고(수동 톤스택은 미드를 올리지 못한다. θ 범위 ±12dB는 그대로), 입력 하이패스(`in_hp_hz`)를 픽업이 아니라 앰프 계열에서 정한다. 대응표 값이나 사전 범위 규칙을 바꾸면 대응표 버전(`MAPPING_VERSION`, 현재 2)을 올린다.
 
 **사전 범위 계산**
 
-사전 범위는 확률분포가 아니라 차원별 [하한, 상한]과 중심값이다. ⑥에서는 사전 범위를 벗어난 거리의 제곱에 벌점을 주고(λ_prior 항), ④에서만 이 범위 안에서 θ를 균등하게 뽑는다(균등 사전분포). 결과는 `prior.json`에 저장한다. 범위 충돌 경고 코드는 `range_conflict:<θ 이름>:<세션 값들>`.
+사전 범위는 확률분포가 아니라 차원별 [하한, 상한]과 중심값이다. ⑥에서는 사전 범위를 벗어난 거리의 제곱에 벌점을 주고(λ_prior 항), ④에서만 이 범위 안에서 θ를 균등하게 뽑는다(균등 사전분포). 결과는 `prior.json`에 대응표 버전(`mapping_version`)과 함께 저장한다. 범위 충돌 경고 코드는 `range_conflict:<θ 이름>:<세션 값들>`.
 
 1. 24차원 모두 [0, 1]에서 시작한다.
-2. 입력된 세션 값마다 대응표 범위를 적용한다. 여러 세션 값이 같은 차원을 건드리면 교집합을 쓰고, 교집합이 비면 합집합으로 넓히고 경고를 남긴다.
+2. 입력된 세션 값마다 대응표 범위를 적용한다. 여러 세션 값이 같은 차원을 건드리면 교집합을 쓴다. 교집합이 비면 게인 우선 규칙으로 `amp.gain` 범위를 쓰고(예: fender×high는 Fender 드라이브 채널이나 크랭크한 트위드로 본다), `amp.gain`이 없을 때만 합집합으로 넓힌다. 어느 경우든 경고를 남긴다.
 3. confidence가 1 미만이면 그만큼 전체 범위 쪽으로 넓힌다.
 4. 차원마다 [하한, 상한]과 중심값을 출력한다.
 
@@ -207,7 +207,7 @@
 3. 세션에 조건 드롭아웃(필드를 일정 확률로 `unknown`으로 가림)과 confidence 증강(confidence를 무작위로 낮춤)을 적용한다.
 4. EGDB DI에서 3초를 잘라 DI 레벨을 무작위로 바꾼다(DI 레벨 증강, `SynthConfig.di_gain_range_db`. θ의 입력단 게인과 별개).
 5. y = G(x; θ)를 렌더링한다.
-6. pedalboard로 무작위 EQ, 컴프, 짧은 리버브 증강을 건다.
+6. pedalboard로 무작위 EQ, 컴프, 짧은 리버브 증강을 건다. 이어서 분리 잔여물 근사 증강(무작위 로우패스 6~16kHz, SNR 25~45dB 노이즈, 각각 확률 0.5)을 건다(`augment_separation`, ④만. 실험 1 가짜 곡에는 걸지 않는다).
 
 데이터는 학습 중 GPU에서 바로 만들고 저장하지 않는다.
 
@@ -223,11 +223,12 @@
 ### 4.6 ⑤ 인코더 (파라미터 추정 인코더)
 
 ```
-스템 3초 → log-Mel(128 밴드) → CNN 4~6층 → Global Pooling → 오디오 벡터
+스템 3초 → log-Mel(128 밴드) → CNN 4~6층 → 시간 축 풀링(주파수 축은 펼침) → 오디오 벡터
 세션 벡터(21) ─────────────────────────────────────────────┐
 [오디오 벡터 ; 세션 벡터] → MLP → sigmoid → θ̂ (24)
 ```
 
+- 풀링: 시간 축만 평균+최대로 줄이고 주파수 축은 펼친다(`EncoderConfig.pool="time"`). 주파수·시간 전역 풀링은 컷오프·공진 주파수의 위치를 지우기 때문이다. 대응표 v1 인코더(`encoder_v1_best.pt`)는 전역 풀링(`pool="global"`, 기본값)으로 학습했고, 기본값을 그대로 두어 계속 불러올 수 있다.
 - 손실: θ MSE + MR-STFT 손실(multi-resolution STFT loss, Yamamoto 외 2020)(G(x; θ̂) vs y)
 - 실제 곡: 3초 창 여러 개의 θ̂ 중앙값
 - 학습: Colab GPU에서 몇 시간 이내 목표. 넘으면 층 수나 Mel 크기를 줄인다.
@@ -235,11 +236,11 @@
 
 **체크포인트**
 
-- 위치: `checkpoints/encoder_<θ버전>_<날짜>.pt` (`.gitignore` 대상). Colab에서는 Google Drive에 저장한다.
-- 내용: `state_dict`, 옵티마이저 상태와 스텝(이어서 학습용), 모델 설정(Mel 밴드 수, 층 수), `theta_version`, 검증 손실.
+- 위치: `checkpoints/encoder_v<θ버전>_m<대응표 버전>_<날짜>.pt` (`.gitignore` 대상). Colab에서는 Google Drive에 저장한다.
+- 내용: `state_dict`, 옵티마이저 상태와 스텝(이어서 학습용), 모델 설정(Mel 밴드 수, 층 수, 풀링), `theta_version`, `mapping_version`, 검증 손실.
 - 저장 주기: 일정 스텝마다 덮어쓰고, 검증 손실이 가장 낮은 것은 `_best`로 따로 둔다. Colab 런타임이 끊기면 마지막 체크포인트에서 이어서 학습한다.
-- θ 버전: 4.4의 블록 구성이나 범위를 바꾸면 `theta_version`을 올린다. 불러올 때 G의 버전과 다르면 오류를 내고, 인코더 없이 시작점 `prior_center`·`prior_sample_i`만으로 진행한다.
-- 배포: 최종 `encoder_<θ버전>_best.pt`는 저장소에 커밋해 클론만으로 받게 한다(`.gitignore` 예외, 중간 체크포인트는 제외). 수십 MB를 넘으면 Release 첨부로 바꾼다. 사용자가 .nam을 만들 때 필요한 오디오는 아래와 같다.
+- θ 버전: 4.4의 블록 구성, 범위, G 내부 고정 상수를 바꾸면 `theta_version`을 올린다. 불러올 때 G의 버전과 다르면 오류를 내고, 인코더 없이 시작점 `prior_center`·`prior_sample_i`만으로 진행한다. 설정과 가중치 모양이 맞지 않을 때도 같다. 대응표 버전은 이름과 기록으로만 구분하고 불러올 때 강제하지 않는다(대응표 v1 인코더를 대비책으로 남긴다).
+- 배포: 최종 `encoder_v<θ버전>_m<대응표 버전>_best.pt`는 저장소에 커밋해 클론만으로 받게 한다(`.gitignore` 예외, 중간 체크포인트는 제외). 수십 MB를 넘으면 Release 첨부로 바꾼다. 사용자가 .nam을 만들 때 필요한 오디오는 아래와 같다.
   - DI 풀: EGDB 클립은 저장소·Release에 넣지 않고, 데이터 내려받기 스크립트(`ampcap.get_data`)가 EGDB 공식 Google Drive에서 `audio_DI`를 직접 내려받는다(`gdown`). EGDB README에는 사용 허락("feel free to use EGDB")만 있고 재배포 조건이 없기 때문이다. 내려받은 뒤 4.5의 분할 규칙대로 pool 클립을 고른다. Drive 다운로드가 막히면 EGDB 공식 링크를 안내해 직접 받게 한다.
   - NAM 학습 입력 신호 v3.0.0(`input.wav`): 파일 자체에 라이선스 표기가 없고(NAM 코드의 MIT는 저장소 소프트웨어 대상, wav는 Google Drive 별도 배포) 재배포하지 않는다. 데이터 내려받기 스크립트가 NAM 공식 문서에 걸린 Google Drive 링크에서 직접 내려받는다(`gdown`). 막히면 공식 문서 링크를 안내한다. 버전은 NAM 학습 코드가 자동 판별한다.
 
@@ -306,7 +307,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 
 **실험 1. 파라미터 복원 실험 (핵심)**
 
-앰프 계열 5개 × 정답 θ 4개 = 가짜 곡 20개를 EGDB test 분할의 DI로 만들고 믹스 처리 증강을 건다. 결과는 `runs/exp1/exp1_results.jsonl`에 쌓는다(`runs/<날짜_곡명>/` 규약의 예외). 파이프라인으로 .nam을 만들고, test 분할에서 가짜 곡에 쓰지 않은 미사용 DI를 G(θ_true)와 .nam에 각각 넣어 비교한다.
+앰프 계열 5개 × 정답 θ 4개 = 가짜 곡 20개를 EGDB test 분할의 DI로 만들고 믹스 처리 증강을 건다. 결과는 `runs/exp1/exp1_results.jsonl`(대응표 v1), `runs/exp1_v2/exp1_results.jsonl`(대응표 v2)에 쌓는다(`runs/<날짜_곡명>/` 규약의 예외). 행마다 `mapping_version`을 기록하고, 기존 행과 대응표 버전이 다르면 이어서 실행하지 않는다(필드가 없는 행은 v1). 대응표 v2는 끝까지 지키는 부분집합(통계 4종 × 시작점 3 × 세션 3 + 세션만 기준)만 다시 돌리고, 통계 묶음 비교는 v1 결과로 보고한다. θ 오차는 바이어스 기준형(`pre1_bias ≥ 0`, 음수이면 두 바이어스를 함께 뒤집음)으로 바꾼 뒤 잰다. ⑥ 통계는 극성에 불변이라 두 형태를 구분할 수 없다. 톤스택은 노브 복원을 주장하지 않고 대역별 dB 차이로 보고한다. 파이프라인으로 .nam을 만들고, test 분할에서 가짜 곡에 쓰지 않은 미사용 DI를 G(θ_true)와 .nam에 각각 넣어 비교한다.
 
 | 비교 | 조건 |
 |---|---|
@@ -338,7 +339,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | 전체 실행 스크립트 | `ampcap/pipeline.py` (`python -m ampcap.pipeline`) |
 | ③ 중립 θ 통과 테스트 | 캐비닛 공진은 끌 수 없어 블록별(캐비닛 제외 전체 포함)로 진폭 스펙트럼을 비교 |
 | 데이터 내려받기 스크립트 | `ampcap/get_data.py` (`python -m ampcap.get_data`). gdown 공개 폴더 목록은 50개까지라 EGDB `audio_DI`(240곡) 목록은 Colab에서 Drive API(Google 로그인)로 받고, 파일은 gdown으로 받는다. NAM 입력은 NAM 코드의 v3.0.0 MD5로 확인 |
-| 인코더 체크포인트 | θ 버전은 `graybox/amp.py`의 `THETA_VERSION`(현재 1). 학습 중 파일은 `encoder_v1_<시작 날짜>.pt`, 최고 모델은 날짜 없이 `encoder_v1_best.pt`. Colab은 Drive `checkpoints/`에 저장하고, 01 노트북은 같은 θ 버전의 가장 최근 파일에서 이어 학습한다. 파이프라인·앱의 기본 인코더는 저장소의 `checkpoints/encoder_v1_best.pt` |
+| 인코더 체크포인트 | θ 버전은 `graybox/amp.py`의 `THETA_VERSION`(현재 1), 대응표 버전은 `session.py`의 `MAPPING_VERSION`(현재 2). 학습 중 파일은 `encoder_v1_m2_<시작 날짜>.pt`, 최고 모델은 날짜 없이 `encoder_v1_m2_best.pt`. Colab은 Drive `checkpoints/`에 저장하고, 01 노트북은 같은 θ 버전·대응표 버전의 가장 최근 파일에서 이어 학습한다. 파이프라인·앱의 기본 인코더는 저장소의 `checkpoints/encoder_v1_m2_best.pt`, 없으면 대응표 v1 인코더 `checkpoints/encoder_v1_best.pt` |
 
 ## 5. 데모
 
@@ -371,7 +372,8 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | 구간이 기준보다 짧음 | 다음 단계 진행을 막고 안내 |
 | LLM 실패, 시간 초과 | 직접 입력 폼으로 전환 |
 | LLM 출력 스키마 불일치 | 한 번 재요청, 실패 시 맞는 필드만 채움 |
-| 대응표 범위 충돌 | 합집합으로 넓히고 경고 기록 |
+| 대응표 범위 충돌 | 게인 우선 규칙(`amp.gain` 범위, 없으면 합집합)과 경고 기록 |
+| 실험 1 결과의 대응표 버전 불일치 | 이어 실행 거부, 다른 결과 폴더 안내 |
 | ⑥ 손실 NaN, 발산 | 최선 θ로 복원, 학습률 낮춰 재시작 |
 | ⑦ ESR이 큼 | 경고, 더 큰 모델로 재학습 선택지 제공 |
 
@@ -384,12 +386,14 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | ③ | `torch.autograd.gradcheck`(double) | 수치 미분과 일치 |
 | ③ | 주파수 샘플링 방식 계산과 `lfilter` 비교 | 거의 같음 |
 | ③ | 처리 속도 측정 | ④의 실시간 생성이 가능한 속도 |
-| ② | 전부 unknown이면 전체 범위, 겹침·충돌 계산, 잘못된 값 거부 | 모두 통과 |
+| ② | 전부 unknown이면 전체 범위, 겹침·충돌 계산(게인 우선 규칙), 잘못된 값 거부, 모든 계열 `ts_mid_db` 상한 ≤ 0 | 모두 통과 |
 | ① | 무음 섞인 사인파로 길이·무음 점검, 크로스페이드 접합부에서 클릭 없음 | 모두 통과 |
 | ⑥ 통계 | 전체 음량 변화에 불변 | 차이 거의 0 |
 | ⑥ 통계 | 게인 증가 시 세게 친 구간만 더 밝아지고, 트레블 증가 시 모든 구간이 비슷하게 밝아짐 | 성립 (실패 시 통계 설계 재검토) |
 | ⑥ 최적화 | 같은 DI와 정답 θ로 렌더링한 타깃 스템에서 θ 복원 검사 | 거의 정확히 복원 |
 | ⑤ | 작은 배치 과적합 | 손실이 거의 0 |
+| ⑤ | 대응표 v1 형식 체크포인트(전역 풀링) 불러오기, 모양 불일치 시 인코더 없이 진행 | 통과 |
+| ⑨ | 대응표 버전이 다른 결과에 이어 실행 거부, 바이어스 기준형 | 통과 |
 | ⑦ | 미사용 DI로 G와 .nam 비교 | ESR 0.01 미만(NAM 학습기 "Great!" 기준 차용)을 1차 목표 |
 | ②-0 | 모의 응답으로 스키마 검증, 실제 곡 몇 개 수동 확인 | 통과 |
 | 전체 | 음원 하나로 .nam까지 한 번에 실행 | 오류 없이 완료 |
@@ -448,7 +452,15 @@ checkpoints/         ⑤ 인코더 체크포인트 (최종 _best만 커밋)
 - 표현력은 G의 블록 구조에 묶인다. 퍼즈, 옥타버, 모듈레이션은 다루지 않는다.
 - 정확도는 실제 앰프를 리앰핑한 캡처(DI–앰프 출력 페어)보다 낮을 것으로 예상한다. 장점은 녹음 과정 없이 만든다는 편의성이다.
 - 정량 평가는 주로 합성 데이터에 기반한다.
-- 대응표의 범위는 초기 가정이다.
+- 대응표 v2도 근거가 약하거나 확인할 수 없는 칸이 남아 있다(5150·Rectifier·Diezel·ENGL·Friedman·Orange 등). 세션 정보의 효과는 근거가 있는 Fender/Marshall/Vox 칸과 나눠 보고한다.
+- 프리앰프 게인의 실제 근거는 두 단의 합계(예: SLO 51~71dB, JCM800 45~60dB)에만 있다. 대응표는 단별 상자라 합계 제약을 표현하지 못하고, 넣지 않는다.
+- `pa_sag`는 tanh 뒤의 이득 감소라 실제 sag(헤드룸 감소)보다 약 10배 깊다(sag=1 ≈ −8.3dB). 출력이 RMS 정규화되므로 θ*의 `pa_sag`는 "sag"가 아니라 믹스 버스 압축까지 포함한 "느린 압축 전체"로 읽는다.
+- 픽업 공진(2~5kHz)을 담는 θ가 없다. 픽업 차이는 `pre1_lp_hz`, 셸빙, 캐비닛 딥이 흡수하고, `ts_mid_db ≤ 0`이라 Q > 1의 좁은 공진 피크는 재현하지 못한다.
+- 캐비닛 공진은 +6dB / Q 2로 고정이다. 측정 근거는 2.7dB @110Hz 1건뿐이라 저역 혹을 과장할 수 있다.
+- 톤스택 범위가 앰프 전체 밝기(브라이트 캡, 출력 임피던스, 스피커)를 떠안는다. 셸빙과 pre·cab 필터가 밝기를 나눠 가질 수 있어 톤 노브 값은 복원 대상으로 주장하지 않는다.
+- Tube Screamer의 720Hz 병렬 하이패스(`x + (g−1)·HP720(x)`)가 없어 험프 대비가 실제(14~15dB)보다 작고(약 12dB), 저역이 클리퍼로 들어가지 않는 "타이트함"을 표현하지 못한다.
+- 모델 dB 규약은 두 가정(잭 피크 0.3V, DI 크레스트 팩터 4~6)에 기댄다. 측정 크레스트 팩터는 5.3~9.2라 pre1 경계가 0~4dB 낮게 잡혔을 수 있다(불확실성 ±4dB).
+- 위의 G 상수 수정(캐비닛 공진, TS 하이패스, sag 형태)과 `pre1_bias` 범위 변경은 θ 버전을 올려야 하므로 11/20 뒤로 미룬다.
 
 ## 11. 주요 결정 기록
 
@@ -498,6 +510,8 @@ checkpoints/         ⑤ 인코더 체크포인트 (최종 _best만 커밋)
 | 세션 벡터 | 세션 정보의 21차원 조건 벡터(원-핫 × confidence, unknown 칸은 1) | conditioning vector | `session_vector`, 배치 키 `session_vec` |
 | 조건 드롭아웃 / confidence 증강 | ④에서 필드를 unknown으로 가림 / confidence를 무작위로 낮춤 | conditioning dropout | `dropout_session` |
 | 대응표 | 세션 값 → θ 차원별 범위 표 | — | `MAPPING` |
+| 대응표 버전 | 대응표 값과 사전 범위 규칙의 버전. θ 버전과 별개. 실험 1 결과·`prior.json`·인코더 체크포인트 이름에 기록 | — | `MAPPING_VERSION`, `mapping_version` |
+| 게인 우선 규칙 | 사전 범위 교집합이 비면 `amp.gain` 범위를 쓰는 규칙(없으면 합집합) | — | `compute_prior` |
 | 사전 범위 | 차원별 [하한, 상한]과 중심값. 확률분포가 아니다(④에서만 균등 샘플링). 문헌은 "prior"라는 말을 쓰지 않는다 | parameter ranges (DeepAFx-ST), prior range | `Prior`, `prior.json` |
 | 곡별 파라미터 최적화 | ⑥. 가중치는 그대로 두고 θ만 곡마다 최적화. 앱 화면 이름은 "톤 찾기" | inference-time optimization | `fit`, `FitConfig`, `FitResult` |
 | 통계 매칭 손실 | ⑥의 통계 4종 L1 손실. 근거: McDermott & Simoncelli 2011(통계로 소리를 합성), 프로젝트는 같은 원리로 θ를 최적화 | summary-statistics matching loss | `stat_losses` |
@@ -538,13 +552,15 @@ checkpoints/         ⑤ 인코더 체크포인트 (최종 _best만 커밋)
 | 레벨 구간 | 연주 프레임 음량 분위수로 나눈 4구간 | level bins (quantile) | `StatConfig.tau_db` |
 | 다이내믹스 통계 | 크레스트 팩터 평균·분산, 프레임 음량 분포 폭 | dynamics statistics | `dyn` |
 | 대역별 dB 차이(잔차) | 장기 평균 스펙트럼의 4대역(저역·중역·중고역·고역) 평균 차이(예측 − 타깃) | band-wise level difference | `band_diff_db`, `describe_residual` |
+| 분리 잔여물 근사 증강 | ④에서 믹스 처리 증강 뒤에 거는 무작위 로우패스·노이즈 | — | `augment_separation` |
+| 바이어스 기준형 | θ 오차를 잴 때 `pre1_bias ≥ 0`이 되게 두 바이어스를 함께 뒤집은 θ | — | `canonical_bias` |
 | 믹스 처리 증강 | ④와 실험 1에서 무작위 EQ·컴프·짧은 리버브를 거는 것 | mix augmentation | `augment_mix` |
 | 가짜 곡 | 실험 1에서 정답 θ와 EGDB test DI로 만든 평가용 곡(20개) | synthetic test song | `make_fake_songs` |
 | 정답 θ / G(θ_true) | 가짜 곡을 만든 θ / 그 θ를 넣은 G | ground-truth parameters | `theta_true` |
 | 미사용 DI | 가짜 곡이나 ⑦ 학습에 쓰지 않은 test 분할 DI | held-out DI | `eval_clips` |
 | 중립 θ | 선형 블록이 평탄해지는 θ(EQ 0dB, 비대칭 0, 드라이브 최소) | neutral setting | `neutral_theta` |
 | DI 기준 음량 | ④⑥⑦에서 DI를 맞추는 RMS 0.05 | reference input RMS | `DI_REF_RMS` |
-| θ 버전 | G의 블록 구성·범위 버전. 체크포인트와 맞지 않으면 인코더를 쓰지 않음 | — | `THETA_VERSION`, `theta_version` |
+| θ 버전 | G의 블록 구성·범위·고정 상수 버전. 체크포인트와 맞지 않으면 인코더를 쓰지 않음 | — | `THETA_VERSION`, `theta_version` |
 | 시연 곡 | 모든 중간 결과를 미리 만들어 두는 2~3곡 | — | — |
 | (a) 후보 화면 | ⑥ 후보 A(θ*)/B를 들어 보는 화면(선택 기능) | — | 앱 `cand_a`, `cand_b` |
 | 시간 기반 효과(공간계) | 딜레이·리버브. G가 다루지 않음 | time-based effects | — |

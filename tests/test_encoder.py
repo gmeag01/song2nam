@@ -87,3 +87,36 @@ def test_theta_version_mismatch_falls_back_to_no_encoder(tmp_path, monkeypatch):
     assert E.try_load(p, log=msgs.append) is None and "θ 버전" in msgs[0]
     assert E.try_load(tmp_path / "none.pt", log=msgs.append) is None and "없습니다" in msgs[1]
     assert E.try_load(None) is None
+
+
+def test_time_pooling_and_old_checkpoint_still_loads(tmp_path):
+    """새 구조(pool="time")는 새 학습에서만 켠다. 예전 체크포인트(config에 pool 없음)는 global로 불러온다."""
+    from ampcap import encoder as E
+
+    cfg = dict(n_mels=64, channels=[8, 16, 32], hidden=64, dropout=0.0)
+    new = Encoder(EncoderConfig(**cfg, pool="time")).eval()
+    th = new(torch.randn(2, SR // 2) * 0.1, torch.rand(2, SESSION_DIM))
+    assert th.shape == (2, N_PARAMS)
+    save(new, tmp_path / "new.pt")
+    ck = torch.load(tmp_path / "new.pt")
+    assert ck["mapping_version"] == E.MAPPING_VERSION and ck["config"]["pool"] == "time"
+    assert load(tmp_path / "new.pt").cfg.pool == "time"
+
+    old = _small()
+    torch.save({"model": old.state_dict(), "config": cfg, "theta_version": E.THETA_VERSION,
+                "val_loss": 0.1}, tmp_path / "old.pt")   # 대응표 v1 시절 형식
+    msgs = []
+    m = E.try_load(tmp_path / "old.pt", log=msgs.append)
+    assert m is not None and m.cfg.pool == "global" and m.mapping_version == 1 and "대응표 v1" in msgs[0]
+
+    ck["config"]["pool"] = "global"   # 구조와 가중치 모양이 맞지 않으면 멈추지 않고 인코더 없이
+    torch.save(ck, tmp_path / "bad.pt")
+    assert E.try_load(tmp_path / "bad.pt", log=msgs.append) is None and "불러올 수 없습니다" in msgs[-1]
+
+
+def test_checkpoint_names_carry_mapping_version():
+    from ampcap import encoder as E
+
+    assert E.BEST_PATH.name == f"encoder_v{E.THETA_VERSION}_m{E.MAPPING_VERSION}_best.pt"
+    assert E.default_ckpt_path("20261115").name == f"encoder_v{E.THETA_VERSION}_m{E.MAPPING_VERSION}_20261115.pt"
+    assert E.BEST_PATH != E.LEGACY_PATH

@@ -18,7 +18,7 @@ from . import blocks
 from .filters import SR
 
 # (이름, 스케일, 하한, 상한). 순서가 곧 θ의 차원 순서다.
-# PARAMS·BLOCKS(블록 구성이나 범위)를 바꾸면 올린다. 인코더 체크포인트가 이 값으로 G와 맞는지 확인한다.
+# PARAMS·BLOCKS(블록 구성, 범위)나 G 내부 고정 상수를 바꾸면 올린다. 인코더 체크포인트가 이 값으로 G와 맞는지 확인한다.
 THETA_VERSION = 1
 
 PARAMS: list[tuple[str, str, float, float]] = [

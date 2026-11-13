@@ -128,7 +128,8 @@ def test_exp1_resume_after_truncated_line(tmp_path, monkeypatch):
     from ampcap import evaluate as E
 
     res = tmp_path / "exp1_results.jsonl"
-    ok = {"song": 0, "start": "center", "stats": "all4", "session": "none", "esr": 0.1}
+    ok = {"song": 0, "start": "center", "stats": "all4", "session": "none", "esr": 0.1,
+          "mapping_version": 2}
     res.write_text(json.dumps(ok) + "\n" + '{"song": 1, "start": "mul', encoding="utf-8")
     assert E.read_results(res) == [ok]
 
@@ -141,3 +142,38 @@ def test_exp1_resume_after_truncated_line(tmp_path, monkeypatch):
     with res.open("a", encoding="utf-8") as f:  # 재개 뒤 새 결과
         f.write(json.dumps({**ok, "song": 2}) + "\n")
     assert [r["song"] for r in E.read_results(res)] == [0, 2]
+
+
+def test_exp1_refuses_resume_across_mapping_versions(tmp_path, monkeypatch):
+    """대응표 버전이 다른 행(필드 없음 = v1)이 있으면 같은 파일에 이어 쓰지 않는다."""
+    import pytest
+
+    from ampcap import evaluate as E
+
+    res = tmp_path / "exp1_results.jsonl"
+    res.write_text(json.dumps({"song": 0, "start": "prior_center", "stats": "all4", "session": "none"}) + "\n",
+                   encoding="utf-8")
+    monkeypatch.setattr(E, "make_fake_songs", lambda *a, **k: [])
+    with pytest.raises(ValueError, match="대응표 버전"):
+        E.run_experiment1(None, None, tmp_path, device="cpu")
+
+
+def test_bias_canonicalized_in_theta_error():
+    from ampcap.evaluate import canonical_bias
+    from ampcap.graybox.amp import INDEX
+
+    th = np.full(N_PARAMS, 0.5)
+    th[INDEX["pre1_bias"]], th[INDEX["pre2_bias"]] = 0.3, 0.8   # b1 = −0.2, b2 = +0.3
+    flipped = th.copy()
+    flipped[INDEX["pre1_bias"]], flipped[INDEX["pre2_bias"]] = 0.7, 0.2   # 두 바이어스를 함께 뒤집은 θ
+    np.testing.assert_allclose(canonical_bias(th), canonical_bias(flipped))
+    np.testing.assert_allclose(canonical_bias(flipped), flipped)   # pre1_bias ≥ 0이면 그대로
+
+
+def test_separation_aug_keeps_shape_and_level():
+    from ampcap.synth_data import augment_separation
+
+    y = (np.random.default_rng(0).standard_normal(48000) * 0.1).astype(np.float32)
+    out = augment_separation(y, np.random.default_rng(1))
+    assert out.shape == y.shape and out.dtype == np.float32 and np.all(np.isfinite(out))
+    assert 0.5 < np.sqrt(np.mean(out ** 2)) / 0.1 < 1.5

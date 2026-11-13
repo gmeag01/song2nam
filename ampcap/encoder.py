@@ -1,6 +1,7 @@
 """⑤ 파라미터 추정 인코더.
 
-스템 3초 → log-Mel(128) → CNN → Global Pooling → 오디오 벡터
+스템 3초 → log-Mel(128) → CNN → 풀링 → 오디오 벡터
+  풀링: "global"(주파수·시간 평균+최대, 예전 체크포인트) / "time"(시간 축만 줄이고 주파수 축은 펼침)
 [오디오 벡터 ; 세션 벡터(21)] → MLP → sigmoid → θ̂ (24)
 
 손실: θ MSE + MR-STFT(G(x; θ̂) vs y). 실제 곡은 3초 창 여러 개의 θ̂ 중앙값.
@@ -19,7 +20,7 @@ import torch
 from torch import nn
 
 from .graybox.amp import N_PARAMS, THETA_VERSION, GrayboxAmp, rms
-from .session import SESSION_DIM
+from .session import MAPPING_VERSION, SESSION_DIM
 from .stats import mel_filterbank
 
 
@@ -32,6 +33,7 @@ class EncoderConfig:
     channels: list = field(default_factory=lambda: [32, 64, 128, 128, 256])
     hidden: int = 256
     dropout: float = 0.1
+    pool: str = "global"   # 예전 체크포인트 호환 기본값. 새 학습은 "time"(컷오프 주파수의 위치를 남김)
 
 
 class LogMel(nn.Module):
@@ -63,15 +65,24 @@ class Encoder(nn.Module):
                        nn.MaxPool2d(2)]
             ch = out
         self.cnn = nn.Sequential(*layers)
+        if c.pool not in ("global", "time"):
+            raise ValueError(f"pool은 'global' 또는 'time': {c.pool!r}")
+        m = c.n_mels
+        for _ in c.channels:
+            m //= 2
+        feat = 2 * ch * (m if c.pool == "time" else 1)
         self.head = nn.Sequential(
-            nn.Linear(2 * ch + SESSION_DIM, c.hidden), nn.GELU(), nn.Dropout(c.dropout),
+            nn.Linear(feat + SESSION_DIM, c.hidden), nn.GELU(), nn.Dropout(c.dropout),
             nn.Linear(c.hidden, c.hidden), nn.GELU(),
             nn.Linear(c.hidden, N_PARAMS),
         )
 
     def forward(self, audio: torch.Tensor, session: torch.Tensor) -> torch.Tensor:
         h = self.cnn(self.mel(audio))                     # (B, C, M', L')
-        h = torch.cat([h.mean(dim=(2, 3)), h.amax(dim=(2, 3))], -1)  # Global avg + max pooling
+        if self.cfg.pool == "time":   # 시간 축 평균+최대, 주파수 축 M'개는 펼친다
+            h = torch.cat([h.mean(dim=3), h.amax(dim=3)], 1).flatten(1)
+        else:                          # Global avg + max pooling
+            h = torch.cat([h.mean(dim=(2, 3)), h.amax(dim=(2, 3))], -1)
         return torch.sigmoid(self.head(torch.cat([h, session], -1)))
 
 
@@ -191,7 +202,10 @@ def evaluate(model: Encoder, gen, n_batches: int = 8) -> float:
 
 # ---------------------------------------------------------------- 체크포인트 (설계 문서 4.6)
 
-BEST_PATH = Path("checkpoints") / f"encoder_v{THETA_VERSION}_best.pt"   # 저장소에 커밋하는 최종본
+# 이름에 θ 버전과 대응표 버전을 함께 넣는다. 대응표만 바뀌어도 예전 체크포인트에서 이어 학습하거나 덮어쓰지 않게.
+_TAG = f"encoder_v{THETA_VERSION}_m{MAPPING_VERSION}"
+BEST_PATH = Path("checkpoints") / f"{_TAG}_best.pt"   # 저장소에 커밋하는 최종본
+LEGACY_PATH = Path("checkpoints") / "encoder_v1_best.pt"   # 대응표 v1로 학습한 인코더(대비책)
 
 
 class ThetaVersionError(ValueError):
@@ -199,7 +213,7 @@ class ThetaVersionError(ValueError):
 
 
 def default_ckpt_path(day: str | None = None) -> Path:
-    return Path("checkpoints") / f"encoder_v{THETA_VERSION}_{day or time.strftime('%Y%m%d')}.pt"
+    return Path("checkpoints") / f"{_TAG}_{day or time.strftime('%Y%m%d')}.pt"
 
 
 def _check_version(ck: dict, path) -> None:
@@ -211,13 +225,13 @@ def _check_version(ck: dict, path) -> None:
 def _save_full(model, opt, sched, step, history, best_val, path):
     torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                 "step": step, "history": history, "config": asdict(model.cfg),
-                "theta_version": THETA_VERSION, "val_loss": best_val}, path)
+                "theta_version": THETA_VERSION, "mapping_version": MAPPING_VERSION, "val_loss": best_val}, path)
 
 
 def save(model: Encoder, path: str | Path, val: float | None = None):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save({"model": model.state_dict(), "config": asdict(model.cfg),
-                "theta_version": THETA_VERSION, "val_loss": val}, path)
+                "theta_version": THETA_VERSION, "mapping_version": MAPPING_VERSION, "val_loss": val}, path)
 
 
 def load(path: str | Path, device: str = "cpu") -> Encoder:
@@ -225,6 +239,7 @@ def load(path: str | Path, device: str = "cpu") -> Encoder:
     _check_version(ck, path)
     model = Encoder(EncoderConfig(**ck["config"]))
     model.load_state_dict(ck["model"])
+    model.mapping_version = ck.get("mapping_version", 1)   # 정보로만 기록(강제하면 v1 인코더 대비책이 사라짐)
     return model.to(device).eval()
 
 
@@ -239,10 +254,21 @@ def try_load(path: str | Path | None, device: str = "cpu", log=print) -> Encoder
         log(f"경고: 인코더 {path}가 없습니다. 인코더 없이 진행합니다.")
         return None
     try:
-        return load(path, device)
+        model = load(path, device)
     except ThetaVersionError as e:
         log(f"경고: {e} 인코더 없이 진행합니다.")
         return None
+    except (RuntimeError, TypeError) as e:   # 구조 설정과 가중치 모양이 맞지 않음
+        log(f"경고: 인코더 {path}를 불러올 수 없습니다({type(e).__name__}). 인코더 없이 진행합니다.")
+        return None
+    if model.mapping_version != MAPPING_VERSION:
+        log(f"참고: 인코더 {path}는 대응표 v{model.mapping_version}로 학습했습니다(지금 v{MAPPING_VERSION}).")
+    return model
+
+
+def default_encoder_path() -> Path:
+    """앱·파이프라인 기본 인코더: 지금 대응표 버전의 최종본, 없으면 대응표 v1 인코더."""
+    return BEST_PATH if BEST_PATH.exists() else LEGACY_PATH
 
 
 @torch.no_grad()
