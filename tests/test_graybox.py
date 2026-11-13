@@ -133,3 +133,15 @@ def test_block_responses_for_visualization():
     r = G.block_responses(torch.rand(N_PARAMS))
     assert set(BLOCK_ORDER) <= set(r)
     assert all(torch.isfinite(r[b]).all() for b in BLOCK_ORDER)
+
+
+def test_fit_render_matches_final_render_high_gain():
+    """⑥(FFT 필터 + 2배 오버샘플링)과 ⑦ 렌더링(lfilter + 2배 오버샘플링)이 같은 소리를 낸다."""
+    G = GrayboxAmp()
+    x = _tone(T=3 * SR, amp=0.05, f=110.0, dtype=torch.float32)
+    th = theta_from_units({"pre1_gain_db": 36.0, "pre2_gain_db": 30.0, "boost_drive_db": 20.0,
+                           "pa_drive_db": 12.0})
+    with torch.no_grad():
+        y6 = G(x, th, mode="fft", oversample=True)
+        y7 = G.render(x, th)
+    assert _esr(y6, y7) < 1e-3  # FFT 필터 근사 오차가 하이게인에서 정상 구간까지 약 1e-4로 남는다(CI 실측 1.1e-4)

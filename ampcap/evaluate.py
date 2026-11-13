@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,6 +62,49 @@ def theta_error_units(theta_pred, theta_true) -> dict[str, float]:
         else:
             out[name] = float((up[name] - ut[name]).abs())
     return out
+
+
+# 식별 가능한 게인 조합(설계 4.7, 7장). 사이에 선형 블록만 있는 게인은 dB 합만 출력을 결정한다.
+GAIN_SUMS = {
+    "in+boost_drive": ("in_gain_db", "boost_drive_db"),
+    "boost_level+pre1": ("boost_level_db", "pre1_gain_db"),
+    "pre2": ("pre2_gain_db",),
+    "pa_drive": ("pa_drive_db",),
+    "total": ("in_gain_db", "boost_drive_db", "boost_level_db", "pre1_gain_db", "pre2_gain_db", "pa_drive_db"),
+}
+
+
+def gain_sum_error(theta_pred, theta_true) -> dict[str, float]:
+    """식별 가능한 게인 조합별 dB 합의 절대 오차."""
+    up = denormalize(torch.as_tensor(theta_pred, dtype=torch.float64))
+    ut = denormalize(torch.as_tensor(theta_true, dtype=torch.float64))
+    return {k: float(abs(sum(float(up[n] - ut[n]) for n in ns))) for k, ns in GAIN_SUMS.items()}
+
+
+def stat_sensitivity(theta, di: torch.Tensor, G: GrayboxAmp | None = None, stats: Stats | None = None,
+                     stat_keys=STAT_KEYS, n_weak: int = 3) -> dict:
+    """⑥ 통계 특징의 θ 민감도 JᵀJ 고유분해(게인 식별 진단). 고유값이 작은 방향은 손실이 보지 못하는 θ 조합이다.
+
+    di: (N, T) DI 클립. 통계는 키마다 기준 θ에서의 평균 크기로 나눠 단위를 맞춘다.
+    """
+    G = G or GrayboxAmp()
+    stats = (stats or Stats()).to(di.device)
+    th0 = torch.as_tensor(theta, dtype=torch.float32, device=di.device).reshape(-1)
+
+    def feats(th):
+        st = stats(G(di, th.expand(di.shape[0], -1), mode="fft", oversample=True)[None])
+        return {k: st[k].reshape(-1) for k in stat_keys}
+
+    with torch.no_grad():
+        scale = {k: v.abs().mean().clamp_min(1e-3) for k, v in feats(th0).items()}
+    J = torch.autograd.functional.jacobian(lambda th: torch.cat([v / scale[k] for k, v in feats(th).items()]), th0)
+    w, v = torch.linalg.eigh((J.T @ J).double())
+    weak = []
+    for j in range(min(n_weak, len(w))):
+        top = torch.argsort(v[:, j].abs(), descending=True)[:3].tolist()
+        weak.append({"eigval": float(w[j]), "loadings": {NAMES[i]: round(float(v[i, j]), 3) for i in top}})
+    return {"eigvals": w.cpu().numpy(), "eigvecs": v.cpu().numpy(), "jacobian": J.detach().cpu().numpy(),
+            "names": NAMES, "weak": weak}
 
 
 def stat_distance(pred_audio, target_audio, stats: Stats | None = None) -> dict[str, float]:
@@ -159,6 +203,7 @@ class Exp1Config:
     sessions: list = field(default_factory=lambda: ["none", "correct", "wrong"])
     session_only_baseline: bool = True
     seed: int = 0
+    lambda_anchor: float = 0.1   # ⑥ 드라이브 앵커 세기(0이면 끔). 바꿔 돌릴 때는 결과 폴더를 따로 둔다
 
 
 # 예전 exp1_results.jsonl의 시작점 이름 → 지금 이름
@@ -228,7 +273,6 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     if only_songs:
         songs = songs[:only_songs]
     pool = torch.from_numpy(normalize_di(pool_reader.fixed_clips(cfg.pool_clips, cfg.seed))).to(device)
-    rng = np.random.default_rng(cfg.seed)
     results = []
 
     def record(r):
@@ -243,6 +287,9 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
             sess = {"none": unknown_session(), "correct": song["session"],
                     "wrong": wrong_session(song["session"])}[sess_name]
             prior = compute_prior(sess)
+            # (곡, 세션)마다 시드를 따로 두고 prior_multi 시작점을 한 번만 뽑는다. 이어 실행해도 같은 샘플이 된다
+            rng = np.random.default_rng([cfg.seed, zlib.crc32(f"{song['id']}|{sess_name}".encode())])
+            multi_starts = make_starts(prior, None, 4, rng)
 
             if cfg.session_only_baseline and (song["id"], "session_only", "-", sess_name) not in done:
                 m = _evaluate_theta(prior.center, song, G, device)
@@ -263,16 +310,19 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                         continue
                     if start == "prior_center":
                         starts, names = prior.center[None], ["prior_center"]
-                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 3개
-                        starts, names = make_starts(prior, None, 4, rng)
+                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 4개
+                        starts, names = multi_starts
                     else:
                         starts, names = np.asarray(theta_hat)[None], ["encoder"]
-                    fc = FitConfig(steps=cfg.steps, seed=cfg.seed)
+                    fc = FitConfig(steps=cfg.steps, seed=cfg.seed, lambda_anchor=cfg.lambda_anchor)
                     res = fit(target, pool, prior, theta_hat=theta_hat if start == "encoder" else None,
                               cfg=fc, starts=starts, start_names=names, stat_keys=keys)
                     m = _evaluate_theta(res.theta_star.numpy(), song, G, device)
                     r = {"song": song["id"], "start": start, "stats": stat_name, "session": sess_name,
-                         "fit_loss": float(res.losses.min()), **m}
+                         "fit_loss": float(res.losses.min()),   # 정규화 값이라 조건 사이에 비교하지 않는다
+                         "theta_star": [round(float(v), 5) for v in res.theta_star],
+                         "steps": res.diagnostics["steps"], "terms": res.diagnostics["terms"],
+                         "move": res.diagnostics["move"], "lambda_anchor": fc.lambda_anchor, **m}
                     record(r)
                     log(json.dumps({k: r[k] for k in ("song", "start", "stats", "session", "esr")}))
     return results
@@ -300,6 +350,8 @@ def _evaluate_theta(theta, song, G, device) -> dict:
     err = theta_error_units(th_c, tr_c)
     m["theta_rmse_norm"] = float(np.sqrt(np.mean((th_c - tr_c) ** 2)))
     m["theta_err"] = err
+    m["gain_sum_err"] = gain_sum_error(theta, song["theta"])
+    m["gain_total_err_db"] = m["gain_sum_err"]["total"]
     return m
 
 
@@ -324,12 +376,12 @@ def summarize_exp1(results_path: str | Path) -> "object":
     import pandas as pd
 
     rows = read_results(results_path)
-    df = pd.DataFrame([{k: v for k, v in r.items() if k != "theta_err"} for r in rows])
+    df = pd.DataFrame([{k: v for k, v in r.items() if not isinstance(v, (dict, list))} for r in rows])
     df["start"] = df["start"].replace(_OLD_START)
-    return df.groupby(["session", "stats", "start"])[["esr", "mrstft", "mel_l1", "theta_rmse_norm"]] \
-        .agg(["mean", "median"]).round(4)
+    cols = [c for c in ("esr", "mrstft", "mel_l1", "theta_rmse_norm", "gain_total_err_db") if c in df]
+    return df.groupby(["session", "stats", "start"])[cols].agg(["mean", "median"]).round(4)
 
 
 __all__ = ["esr", "mrstft_distance", "mel_l1", "theta_error_units", "stat_distance", "fad_mel",
            "mushra_summary", "plot_band_diff", "compare_to_truth", "Exp1Config", "run_experiment1",
-           "summarize_exp1", "read_results", "NAMES"]
+           "summarize_exp1", "read_results", "NAMES", "gain_sum_error", "stat_sensitivity"]
