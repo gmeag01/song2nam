@@ -2,7 +2,8 @@
 
 네트워크 가중치는 바꾸지 않고 θ만 곡마다 최적화한다.
 
-L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템)) / (시작점 손실)
+L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템)) / (시작점 손실)   ← 최적화 중
+       최종 θ* 선택은 모든 시작점이 같은 기준(고정 평가 클립에서 시작점 평균 손실)으로 나눈 값으로 한다
      + λ_prior · (사전 범위를 벗어난 거리)²
      + λ_enc · ‖θ − θ̂‖²
 
@@ -46,7 +47,7 @@ class FitConfig:
 class FitResult:
     theta_star: torch.Tensor           # (24,) θ* = 후보 0
     thetas: torch.Tensor               # (S, 24) 시작점별 최종 θ
-    losses: torch.Tensor               # (S,) 고정 클립 평가 손실
+    losses: torch.Tensor               # (S,) 고정 클립 평가 손실(시작점 공통 기준으로 정규화)
     start_names: list[str]
     curve: list[list[float]]           # 스텝별 시작점 손실
     candidates: list[int]              # 서로 다른 상위 결과의 인덱스(손실 순)
@@ -131,12 +132,15 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         terms = torch.stack([ls[k] for k in stat_keys], -1)       # (S, K)
         if norm is None:
             norm = terms.detach().clamp_min(1e-6)
+        return combine(th, terms, norm), terms, norm, st
+
+    def combine(th, terms, norm):
         w = torch.tensor([cfg.weights.get(k, 1.0) for k in stat_keys], device=dev)
         total = (terms / norm * w).sum(-1)
         total = total + cfg.lambda_prior * prior_penalty(th, lo, hi)
         if th_hat is not None and cfg.lambda_enc > 0:
             total = total + cfg.lambda_enc * (th - th_hat).square().sum(-1)
-        return total, terms, norm, st
+        return total
 
     u = _logit(torch.as_tensor(starts, dtype=torch.float32, device=dev)).requires_grad_(True)
     lr = cfg.lr
@@ -185,13 +189,16 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         if since_best >= cfg.patience:
             break
 
-    # 고정 클립으로 시작점별 최선 θ를 평가
+    # 고정 클립으로 시작점별 최선 θ를 평가. 최적화 중의 시작점별 정규화를 그대로 쓰면 손실이 많이 준
+    # 시작점이 θ*가 되므로(처음부터 좋던 θ̂가 불리), 모든 시작점에 같은 기준(1, K)을 쓴다.
     with torch.no_grad():
         n_eval = min(cfg.eval_clips, di_pool.shape[0])
         eval_clips = di_pool[:n_eval]
         th_final = theta_of(best_u)
-        total, terms, _, st = losses_for(th_final, eval_clips, norm)
-        total = torch.nan_to_num(total, nan=float("inf"))
+        _, terms, _, st = losses_for(th_final, eval_clips, norm)
+        finite = torch.where(torch.isfinite(terms), terms, torch.full_like(terms, float("nan")))
+        ref = finite.nanmean(0, keepdim=True).nan_to_num(1.0).clamp_min(1e-6)
+        total = torch.nan_to_num(combine(th_final, terms, ref), nan=float("inf"))
 
     order = torch.argsort(total).tolist()
     cands = []
