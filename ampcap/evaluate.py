@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -228,7 +229,6 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
     if only_songs:
         songs = songs[:only_songs]
     pool = torch.from_numpy(normalize_di(pool_reader.fixed_clips(cfg.pool_clips, cfg.seed))).to(device)
-    rng = np.random.default_rng(cfg.seed)
     results = []
 
     def record(r):
@@ -243,6 +243,9 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
             sess = {"none": unknown_session(), "correct": song["session"],
                     "wrong": wrong_session(song["session"])}[sess_name]
             prior = compute_prior(sess)
+            # (곡, 세션)마다 시드를 따로 두고 prior_multi 시작점을 한 번만 뽑는다. 이어 실행해도 같은 샘플이 된다
+            rng = np.random.default_rng([cfg.seed, zlib.crc32(f"{song['id']}|{sess_name}".encode())])
+            multi_starts = make_starts(prior, None, 4, rng)
 
             if cfg.session_only_baseline and (song["id"], "session_only", "-", sess_name) not in done:
                 m = _evaluate_theta(prior.center, song, G, device)
@@ -263,8 +266,8 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                         continue
                     if start == "prior_center":
                         starts, names = prior.center[None], ["prior_center"]
-                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 3개
-                        starts, names = make_starts(prior, None, 4, rng)
+                    elif start == "prior_multi":  # 사전 범위 중심 + 샘플 4개
+                        starts, names = multi_starts
                     else:
                         starts, names = np.asarray(theta_hat)[None], ["encoder"]
                     fc = FitConfig(steps=cfg.steps, seed=cfg.seed)
@@ -272,7 +275,9 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
                               cfg=fc, starts=starts, start_names=names, stat_keys=keys)
                     m = _evaluate_theta(res.theta_star.numpy(), song, G, device)
                     r = {"song": song["id"], "start": start, "stats": stat_name, "session": sess_name,
-                         "fit_loss": float(res.losses.min()), **m}
+                         "fit_loss": float(res.losses.min()),   # 정규화 값이라 조건 사이에 비교하지 않는다
+                         "theta_star": [round(float(v), 5) for v in res.theta_star],
+                         "steps": res.diagnostics["steps"], "terms": res.diagnostics["terms"], **m}
                     record(r)
                     log(json.dumps({k: r[k] for k in ("song", "start", "stats", "session", "esr")}))
     return results

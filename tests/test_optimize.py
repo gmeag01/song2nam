@@ -52,8 +52,8 @@ def test_recovers_theta_from_same_di():
     di = _di_clips()
     theta_true = theta_from_units({"pre1_gain_db": 26.0, "ts_treble_db": 6.0, "ts_bass_db": -5.0,
                                    "pre2_gain_db": 6.0, "in_gain_db": 0.0})
-    with torch.no_grad():
-        stem = G(di, theta_true.expand(len(di), -1)).reshape(-1)
+    with torch.no_grad():   # 타깃은 ⑦과 같은 렌더링(lfilter + 2배 오버샘플링)
+        stem = G.render(di, theta_true.expand(len(di), -1)).reshape(-1)
     prior = _prior_fixing_all_but(theta_true, FREE)
 
     cfg = FitConfig(steps=400, lr=0.05, clips_per_step=len(di), n_prior_samples=2,
@@ -103,3 +103,23 @@ def test_nan_triggers_restart(monkeypatch):
     res = fit(di.reshape(-1), di, Prior.full(), cfg=FitConfig(steps=6, clips_per_step=2, n_prior_samples=0), G=G)
     assert res.restarts >= 1
     assert torch.isfinite(res.theta_star).all()
+
+
+def test_theta_star_uses_shared_reference_across_starts():
+    """θ*는 손실이 가장 많이 준 시작점이 아니라 실제로 가장 잘 맞는 시작점이어야 한다."""
+    torch.manual_seed(0)
+    G = GrayboxAmp()
+    di = _di_clips(n=3, sec=0.5)
+    theta_true = theta_from_units({"pre1_gain_db": 26.0, "ts_treble_db": 6.0, "ts_bass_db": -5.0})
+    with torch.no_grad():
+        stem = G.render(di, theta_true.expand(len(di), -1)).reshape(-1)
+    far = theta_true.clone()
+    for n in FREE:
+        far[INDEX[n]] = 1.0 - far[INDEX[n]]
+    prior = _prior_fixing_all_but(theta_true, FREE)
+    starts = torch.stack([far, theta_true]).double().numpy()
+    cfg = FitConfig(steps=15, lr=0.05, clips_per_step=len(di), lambda_prior=0.0, patience=100,
+                    eval_clips=len(di))
+    res = fit(stem, di, prior, cfg=cfg, G=G, starts=starts, start_names=["far", "true"])
+    assert res.start_names[int(torch.argmin(res.losses))] == "true", res.losses
+    assert torch.allclose(res.theta_star, res.thetas[1])

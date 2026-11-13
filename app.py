@@ -252,11 +252,17 @@ def find_tone(steps, state):
 
 
 def make_nam(rank, epochs, state):
+    import gradio as gr
+
     from ampcap.distill import distill
     from ampcap.optimize import load_theta
 
+    rank = int(rank or 0)
     rd = Path(state["run_dir"])
-    theta = load_theta(rd / "theta_candidates.json", None if rank == 0 else int(rank))
+    n_cand = len(json.loads((rd / "theta_candidates.json").read_text(encoding="utf-8"))["candidates"])
+    if not 0 <= rank < max(n_cand, 1):
+        raise gr.Error(f"후보 번호는 0~{max(n_cand, 1) - 1} 사이여야 합니다.")
+    theta = load_theta(rd / "theta_candidates.json", None if rank == 0 else rank)
     reader = di_reader_for_split(ARGS.egdb, "test", ARGS.split_file)
     out = distill(theta, rd, ARGS.nam_input, DI_REF_RMS, session=state.get("session"),
                   name=state["song"], epochs=int(epochs),
@@ -346,7 +352,7 @@ def build():
             theta_fig = gr.Plot(label="θ: 앰프 노브와 블록별 주파수 응답")
 
         with gr.Tab("5. .nam 생성 (⑦)"):
-            rank = gr.Number(0, label="후보 번호 (0 = θ*)", precision=0)
+            rank = gr.Number(0, label="후보 번호 (0 = θ*)", precision=0, minimum=0)
             epochs = gr.Slider(10, 300, value=100, step=10, label="NAM 학습 epoch")
             nam_btn = gr.Button(".nam 생성 (⑦)")
             nam_file = gr.File(label="model.nam")
