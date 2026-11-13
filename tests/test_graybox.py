@@ -144,4 +144,5 @@ def test_fit_render_matches_final_render_high_gain():
     with torch.no_grad():
         y6 = G(x, th, mode="fft", oversample=True)
         y7 = G.render(x, th)
-    assert _esr(y6, y7) < 1e-4
+    skip = SR // 10  # FIR 근사와 IIR은 시작 과도 응답이 달라 앞 0.1초는 비교하지 않는다
+    assert _esr(y6[..., skip:], y7[..., skip:]) < 1e-4
