@@ -368,7 +368,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 - NAM 플러그인의 IR 로더는 끄고, DI 트랙의 연주 RMS를 ⑦이 `input_level.json`에 기록한 `di_ref_rms_dbfs`에 맞춘다.
 - 시연 곡 2~3개는 모든 중간 결과를 미리 만들어 두고, 문제가 생기면 불러온다.
 
-**실행 기록**: 실행마다 `runs/<날짜_곡명>/`에 `stem.wav`, `segments.json`, `session.json`, `theta_candidates.json`, `loss_curve.png`, `candidate_k.wav`, `model.nam`을 저장한다. 그 밖에 `stem_full.wav`(Demucs 스테레오 기타 스템), `prior.json`, `input_level.json`, `output.wav`(⑦ 렌더)가 생긴다.
+**실행 기록**: 실행마다 `runs/<날짜_곡명>/`에 `stem.wav`, `segments.json`, `session.json`, `theta_candidates.json`, `loss_curve.png`, `candidate_k.wav`, `model.nam`을 저장한다. 그 밖에 `stem_full.wav`(Demucs 스테레오 기타 스템), `prior.json`, `input_level.json`, `output.wav`(⑦ 렌더)가 생긴다. `runs/`에서는 분석·시각 자료에 쓰는 수치 파일만 저장소에 커밋한다: 실험 결과 `exp1_results.jsonl`, 인코더 학습 기록 `runs/encoder_*/`의 `history.json`·`status.json`, 곡별 `session.json`·`theta_candidates.json`·`distill.json`. 그 밖의 파일(오디오, `.nam`, 그림, 로그)은 `.gitignore`로 빠진다.
 
 ## 6. 오류 처리
 
