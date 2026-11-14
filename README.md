@@ -44,7 +44,7 @@ EGDB DI와 NAM 학습 입력 신호는 공식 Google Drive에서 직접 받습�
 python -m ampcap.get_data --data data
 ```
 
-240곡 전체 목록은 Colab에서만 받을 수 있습니다(Drive API, Google 로그인). 다른 환경에서는 50곡까지 받고, 나머지는 [EGDB 페이지](https://ss12f32v.github.io/Guitar-Transcription/)의 Drive 링크에서 받으라고 안내합니다. 데이터셋과 음원, 분리된 스템은 저작권과 용량 문제로 저장소에 포함하지 않습니다.
+EGDB 240곡의 파일 ID와 MD5는 `ampcap/egdb_manifest.json`에 있어 Colab, Kaggle, 로컬 어디서나 같은 파일을 받고 해시로 확인합니다. 실패한 파일은 [EGDB 페이지](https://ss12f32v.github.io/Guitar-Transcription/)의 Drive 링크에서 받으라고 안내합니다. 데이터셋과 음원, 분리된 스템은 저작권과 용량 문제로 저장소에 포함하지 않습니다.
 
 ## 테스트
 

@@ -345,7 +345,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템))
 | ②-0 LLM API | Anthropic Claude(`claude-opus-5-5`) + 웹 검색 도구 |
 | 전체 실행 스크립트 | `ampcap/pipeline.py` (`python -m ampcap.pipeline`) |
 | ③ 중립 θ 통과 테스트 | 캐비닛 공진은 끌 수 없어 블록별(캐비닛 제외 전체 포함)로 진폭 스펙트럼을 비교 |
-| 데이터 내려받기 스크립트 | `ampcap/get_data.py` (`python -m ampcap.get_data`). gdown 공개 폴더 목록은 50개까지라 EGDB `audio_DI`(240곡) 목록은 Colab에서 Drive API(Google 로그인)로 받고, 파일은 gdown으로 받는다. NAM 입력은 NAM 코드의 v3.0.0 MD5로 확인 |
+| 데이터 내려받기 스크립트 | `ampcap/get_data.py` (`python -m ampcap.get_data`). gdown 공개 폴더 목록은 50개까지라 EGDB `audio_DI`(240곡)의 이름·파일 ID·MD5를 Colab Drive API로 한 번 받아 `ampcap/egdb_manifest.json`에 두고, 파일은 gdown으로 받아 MD5로 확인한다(로그인 불필요). NAM 입력은 NAM 코드의 v3.0.0 MD5로 확인 |
 | 인코더 체크포인트 | θ 버전은 `graybox/amp.py`의 `THETA_VERSION`(현재 1), 대응표 버전은 `session.py`의 `MAPPING_VERSION`(현재 2). 학습 중 파일은 `encoder_v1_m2_<시작 날짜>.pt`, 최고 모델은 날짜 없이 `encoder_v1_m2_best.pt`. Colab은 Drive `checkpoints/`에 저장하고, 01 노트북은 같은 θ 버전·대응표 버전의 가장 최근 파일에서 이어 학습한다. 파이프라인·앱의 기본 인코더는 저장소의 `checkpoints/encoder_v1_m2_best.pt`, 없으면 대응표 v1 인코더 `checkpoints/encoder_v1_best.pt` |
 
 ## 5. 데모
