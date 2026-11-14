@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 
 # EGDB 공식 폴더(데모 페이지 링크, 1h9DrB4dk4QstgjNaHh7lL7IMeKdYw82_) 안의 audio_DI
 EGDB_DI_FOLDER = "1AfpAaWnBvrTLHxe2DafgQ4mz4GGBjwAa"
 EGDB_N = 240
+EGDB_MANIFEST = Path(__file__).with_name("egdb_manifest.json")
 EGDB_PAGE = "https://ss12f32v.github.io/Guitar-Transcription/"
 # NAM 문서의 학습 입력 신호 input.wav (v3.0.0)
 NAM_INPUT_ID = "1KbaS4oXXNEuh2aCPLwKrPdf5KFOjda8G"
@@ -32,7 +34,11 @@ def md5(path) -> str:
 def _gdown_file(file_id: str, out: Path) -> bool:
     import gdown
 
-    return gdown.download(id=file_id, output=str(out), quiet=True) is not None
+    try:
+        return gdown.download(id=file_id, output=str(out), quiet=True) is not None
+    except Exception as e:  # 접근 제한("many accesses") 등은 실패로 세고 다음 파일로 넘어간다
+        print(f"gdown {file_id}: {str(e).splitlines()[0]}")
+        return False
 
 
 def get_nam_input(data_dir="data", download=_gdown_file) -> Path:
@@ -46,41 +52,22 @@ def get_nam_input(data_dir="data", download=_gdown_file) -> Path:
     return out
 
 
-def list_drive_folder(folder_id: str) -> list[tuple[str, str]]:
-    """(이름, 파일 ID) 목록. Colab에서는 Drive API로 전부, 그 밖에서는 gdown 공개 목록(최대 50개)."""
-    try:
-        from google.colab import auth
-        from googleapiclient.discovery import build
-    except ImportError:
-        import gdown
-
-        fs = gdown.download_folder(id=folder_id, skip_download=True, quiet=True, remaining_ok=True)
-        return [(Path(f.path).name, f.id) for f in fs or []]
-    auth.authenticate_user()
-    svc = build("drive", "v3", cache_discovery=False)
-    files, token = [], None
-    while True:
-        r = svc.files().list(q=f"'{folder_id}' in parents and trashed=false", pageSize=1000, pageToken=token,
-                             fields="nextPageToken, files(id, name)", supportsAllDrives=True,
-                             includeItemsFromAllDrives=True).execute()
-        files += [(f["name"], f["id"]) for f in r["files"]]
-        token = r.get("nextPageToken")
-        if not token:
-            return files
+def egdb_manifest() -> list[tuple[str, str, str]]:
+    """(이름, Drive 파일 ID, MD5) 240개. gdown 공개 폴더 목록은 50개까지라 Colab Drive API로 한 번 받아 저장했다."""
+    return [tuple(r) for r in json.loads(EGDB_MANIFEST.read_text(encoding="utf-8"))]
 
 
-def get_egdb(data_dir="data", lister=list_drive_folder, download=_gdown_file) -> int:
+def get_egdb(data_dir="data", files=None, download=_gdown_file) -> int:
     """data/EGDB/audio_DI/*.wav를 채우고 받은 파일 수를 돌려준다. 중간에 끊겨도 다시 돌리면 이어 받는다."""
     out = Path(data_dir) / "EGDB" / "audio_DI"
     out.mkdir(parents=True, exist_ok=True)
-    files = sorted((n, i) for n, i in lister(EGDB_DI_FOLDER) if n.lower().endswith(".wav"))
     failed = []
-    for name, fid in files:
+    for name, fid, want in egdb_manifest() if files is None else files:
         p = out / name
         if p.exists() and p.stat().st_size > 0:
             continue
         part = p.with_name(p.name + ".part")  # 끊긴 파일이 완성본으로 남지 않게
-        if download(fid, part):
+        if download(fid, part) and md5(part) == want:
             part.replace(p)
         else:
             part.unlink(missing_ok=True)
