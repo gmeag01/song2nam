@@ -451,7 +451,8 @@ ampcap/
   evaluate.py        ⑨ 지표와 실험
   pipeline.py        음원 → .nam 전체 실행 (4.11)
 app.py               Gradio 데모
-notebooks/           실험과 그래프
+notebooks/           실험과 그래프. 02는 사용자용 폼 노트북(음원 → .nam)
+docs/session-guide.md  세션 정보 입력 안내 (사용자용, 4.3 스키마 풀이)
 tests/               7장의 테스트
 runs/                실행 기록
 checkpoints/         ⑤ 인코더 체크포인트 (최종 _best만 커밋)

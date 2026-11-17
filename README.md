@@ -64,13 +64,17 @@ python app.py
 
 ## Colab
 
+**음원으로 `.nam` 만들기:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gmeag01/song2nam/blob/main/notebooks/02_song_to_nam.ipynb)
+
+셀을 위에서부터 차례로 실행하고, 폼에서 세션 정보를 고르면 됩니다. 세션 정보 각 항목의 뜻과 고르는 법은 [docs/session-guide.md](docs/session-guide.md)에 있습니다.
+
 학습과 실험은 Colab GPU에서 돌립니다. `notebooks/`의 노트북은 Drive의 `MyDrive/song2nam/`에 `data/`, `runs/`를 두고 씁니다.
 
 | 노트북 | 내용 |
 |---|---|
 | `00_setup_and_tests.ipynb` | 설치, `pytest tests/`, ⑦ ESR 테스트, EGDB 분할, 대응표 대표 설정 청취 |
 | `01_train_encoder.ipynb` | ④ 합성 데이터로 ⑤ 인코더 학습 (체크포인트 이어 학습) |
-| `02_song_to_nam.ipynb` | 음원 → .nam 전체 경로, (b) 세션만 경로, Gradio 앱(`--share`) |
+| `02_song_to_nam.ipynb` | 음원 → .nam (폼으로 세션 정보 입력, 데이터 내려받기 포함) |
 | `03_experiment1.ipynb` | ⑨ 실험 1 파라미터 복원 실험 |
 
 필요한 파일: `data/EGDB/audio_DI/*.wav`(EGDB DI), `data/nam/v3_0_0.wav`(NAM 학습 입력 신호 `input.wav` v3.0.0을 이 이름으로 저장). 둘 다 `00_setup_and_tests.ipynb`의 0번 셀(`ampcap.get_data`)이 받습니다. ②-0 LLM 조사는 `ANTHROPIC_API_KEY`가 필요합니다.
