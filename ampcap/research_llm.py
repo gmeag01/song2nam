@@ -1,9 +1,9 @@
-"""②-0 LLM 장비 조사 (선택).
+"""LLM 장비 조사 (선택).
 
 1. 곡 링크의 제목 정보에서 아티스트·곡명을 뽑고 사용자가 확인한다(오디오는 내려받지 않는다).
-2. Claude + 웹 검색으로 두 단계 조사: 곡에서 쓴 장비 → 아티스트가 평소 쓰는 장비.
+2. Claude + 웹 검색으로 두 단계 조사: 곡 단위 장비(scope song) → 평소 장비(scope usual).
    평소 장비로 채운 필드는 확신도를 낮게(0.5) 매긴다.
-3. 출력은 ②의 스키마 선택지 값만 허용하고 필드마다 출처 URL과 확신도를 받는다. 출처 없으면 unknown.
+3. 출력은 세션 정보 스키마(session.py)의 선택지 값만 허용하고 필드마다 출처 URL과 확신도를 받는다. 출처 없으면 unknown.
 4. 사용자가 출처와 함께 초안을 보고 수정·승인한다. 확정 필드의 확신도는 1.0.
 
 오류 처리: API 실패·시간 초과 → None(직접 입력 폼으로). 스키마 불일치 → 한 번 재요청,
@@ -207,7 +207,7 @@ def research(artist: str, song: str, call: Callable[[str], str] | None = None) -
 def draft_to_session(draft: dict, confirmed: set[str] | None = None,
                      overrides: dict[str, str] | None = None,
                      capture_target: str = "rhythm", same_rig: bool = True) -> dict:
-    """초안 → ② 세션 JSON. confirmed(사용자가 확정한 필드)의 확신도는 1.0.
+    """초안 → 세션 정보(session.json 형식). confirmed(사용자가 확정한 필드)의 확신도는 1.0.
 
     한 confidence 키(amp)에 여러 필드가 걸리면 그중 가장 낮은 값을 쓴다.
     """

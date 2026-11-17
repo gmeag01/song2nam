@@ -1,11 +1,11 @@
-"""⑤ 파라미터 추정 인코더.
+"""파라미터 추정 인코더.
 
 스템 3초 → log-Mel(128) → CNN → 풀링 → 오디오 벡터
   풀링: "global"(주파수·시간 평균+최대, 예전 체크포인트) / "time"(시간 축만 줄이고 주파수 축은 펼침)
 [오디오 벡터 ; 세션 벡터(21)] → MLP → sigmoid → θ̂ (24)
 
 손실: θ MSE + MR-STFT(G(x; θ̂) vs y). 실제 곡은 3초 창 여러 개의 θ̂ 중앙값.
-인코더는 ⑥의 시작점이자 정칙화 기준점(λ_enc 항)이며, 없어도 파이프라인은 동작한다.
+인코더는 곡별 파라미터 최적화의 시작점이자 정칙화 기준점(λ_enc 항)이며, 없어도 파이프라인은 동작한다.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class Encoder(nn.Module):
         h = self.cnn(self.mel(audio))                     # (B, C, M', L')
         if self.cfg.pool == "time":   # 시간 축 평균+최대, 주파수 축 M'개는 펼친다
             h = torch.cat([h.mean(dim=3), h.amax(dim=3)], 1).flatten(1)
-        else:                          # Global avg + max pooling
+        else:                          # 주파수·시간 전역 평균 + 최대 풀링
             h = torch.cat([h.mean(dim=(2, 3)), h.amax(dim=(2, 3))], -1)
         return torch.sigmoid(self.head(torch.cat([h, session], -1)))
 
@@ -91,7 +91,7 @@ class Encoder(nn.Module):
 
 def mrstft(pred: torch.Tensor, target: torch.Tensor,
            ffts=(512, 1024, 2048), eps: float = 1e-7) -> torch.Tensor:
-    """다중 해상도 STFT 거리(스펙트럼 수렴 + 로그 크기 L1). 배치 평균."""
+    """MR-STFT 손실(스펙트럼 수렴 + 로그 크기 L1). 배치 평균."""
     loss = 0.0
     for n in ffts:
         w = torch.hann_window(n, device=pred.device, dtype=pred.dtype)

@@ -1,4 +1,4 @@
-"""⑥ 최적화: 같은 DI와 정답 θ로 렌더링한 타깃 스템에서 θ 복원 검사.
+"""곡별 파라미터 최적화: 같은 DI와 정답 θ로 렌더링한 타깃 스템에서 θ 복원 검사.
 
 CPU에서도 돌도록 3개 차원만 풀고(나머지는 정답으로 고정) 짧은 클립을 쓴다.
 24차원 전체 복원은 실험 1(Colab GPU)에서 확인한다.
@@ -52,7 +52,7 @@ def test_recovers_theta_from_same_di():
     di = _di_clips()
     theta_true = theta_from_units({"pre1_gain_db": 26.0, "ts_treble_db": 6.0, "ts_bass_db": -5.0,
                                    "pre2_gain_db": 6.0, "in_gain_db": 0.0})
-    with torch.no_grad():   # 타깃은 ⑦과 같은 렌더링(lfilter + 2배 오버샘플링)
+    with torch.no_grad():   # 타깃은 증류와 같은 렌더링(lfilter + 2배 오버샘플링)
         stem = G.render(di, theta_true.expand(len(di), -1)).reshape(-1)
     prior = _prior_fixing_all_but(theta_true, FREE)
 
@@ -106,7 +106,7 @@ def test_nan_triggers_restart(monkeypatch):
 
 
 def test_theta_star_uses_shared_reference_across_starts():
-    """θ*는 손실이 가장 많이 준 시작점이 아니라 실제로 가장 잘 맞는 시작점이어야 한다."""
+    """θ*는 시작점별로 정규화한 손실 감소량이 아니라 모든 시작점에 같은 기준으로 잰 손실로 고른다."""
     torch.manual_seed(0)
     G = GrayboxAmp()
     di = _di_clips(n=3, sec=0.5)
@@ -126,7 +126,7 @@ def test_theta_star_uses_shared_reference_across_starts():
 
 
 def test_exchangeable_gains_stay_at_start():
-    """in_gain·boost_level은 시작점 값에 고정, boost=none(boost_drive 고정)이면 in_gain은 푼다."""
+    """교환 게인 고정: in_gain_db·boost_level_db는 시작점 값에 고정, boost=none(boost_drive_db 고정)이면 in_gain_db는 푼다."""
     from ampcap.optimize import exchangeable_mask
 
     di = _di_clips(n=2, sec=0.5)

@@ -1,4 +1,4 @@
-"""③ G: 블록 중립 θ 통과, gradcheck, 주파수 샘플링 방식 vs lfilter, 처리 속도."""
+"""그레이박스 앰프 G: 블록 중립 θ 통과, gradcheck, 주파수 샘플링 방식 vs lfilter, 처리 속도."""
 
 import time
 
@@ -115,7 +115,7 @@ def test_oversampled_render_close_to_base_rate():
 
 
 def test_speed_allows_realtime_synthesis():
-    """④ 실시간 생성: 3초 클립 8개 렌더가 오디오 길이(24초)보다 충분히 빨라야 한다."""
+    """합성 데이터 실시간 생성: 3초 클립 8개 렌더가 오디오 길이(24초)보다 충분히 빨라야 한다."""
     G = GrayboxAmp()
     x = torch.randn(8, 3 * SR) * 0.05
     th = torch.rand(8, N_PARAMS)
@@ -136,7 +136,7 @@ def test_block_responses_for_visualization():
 
 
 def test_fit_render_matches_final_render_high_gain():
-    """⑥(FFT 필터 + 2배 오버샘플링)과 ⑦ 렌더링(lfilter + 2배 오버샘플링)이 같은 소리를 낸다."""
+    """곡별 파라미터 최적화 렌더(FFT 필터 + 2배 오버샘플링)와 증류 렌더(lfilter + 2배 오버샘플링)가 같은 소리를 낸다."""
     G = GrayboxAmp()
     x = _tone(T=3 * SR, amp=0.05, f=110.0, dtype=torch.float32)
     th = theta_from_units({"pre1_gain_db": 36.0, "pre2_gain_db": 30.0, "boost_drive_db": 20.0,
@@ -144,4 +144,4 @@ def test_fit_render_matches_final_render_high_gain():
     with torch.no_grad():
         y6 = G(x, th, mode="fft", oversample=True)
         y7 = G.render(x, th)
-    assert _esr(y6, y7) < 1e-3  # FFT 필터 근사 오차가 하이게인에서 정상 구간까지 약 1e-4로 남는다(CI 실측 1.1e-4)
+    assert _esr(y6, y7) < 1e-3  # 하이게인에서 주파수 샘플링 방식 근사 오차가 약 1e-4 남는다(CI 실측 1.1e-4)

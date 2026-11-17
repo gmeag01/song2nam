@@ -8,8 +8,8 @@
 
 ## 파이프라인 요약
 
-① 분리·구간 선택 → ② 세션 처리(사전 범위, 세션 벡터) → ⑤ 인코더 θ̂ → ⑥ 통계 매칭 손실로 곡별 파라미터 최적화 θ* → ⑦ G(θ*)로 NAM 학습 입력 신호(`input.wav` v3.0.0)를 리앰핑한 뒤 `.nam` 증류.
-③ 그레이박스 앰프 G와 ④ 합성 데이터는 ⑤ 학습용. ⑨ 평가. ⑧은 쓰지 않는 번호.
+분리·구간 선택 → 세션 처리(사전 범위, 세션 벡터) → 인코더 θ̂ → 통계 매칭 손실로 곡별 파라미터 최적화 θ* → G(θ*)로 NAM 학습 입력 신호(`input.wav` v3.0.0)를 리앰핑한 뒤 `.nam` 증류.
+합성 데이터 생성기는 인코더 학습에만 쓴다. 그레이박스 앰프 G는 인코더 학습, 곡별 파라미터 최적화, 증류에 모두 쓴다. 평가는 파이프라인 밖에서 돌린다. 모듈은 번호 없이 이름으로 부른다.
 
 용어는 설계 문서 13장 용어집의 이름만 쓴다. 새 용어가 필요하면 용어집에 먼저 적는다.
 
@@ -18,26 +18,25 @@
 - 오디오: 48kHz 모노. 모듈끼리는 파일(wav, json, 체크포인트, .nam)로만 주고받는다.
 - θ: 24차원, 0~1 정규화. 블록 안에서 실제 단위로 변환(주파수는 로그, 게인은 dB 선형). 블록별 개수와 범위는 설계 문서 4.4.
 - 세션 벡터: 21차원 원-핫(픽업 4, 앰프 계열 6, 게인 4, 캐비닛 4, 부스트 3) × confidence. 단 unknown 칸은 1.
-- G는 PyTorch로 직접 구현, 배치 지원. biquad는 RBJ 쿡북. 학습(④⑤) 중엔 주파수 샘플링 방식 FIR 근사, ⑥은 FIR 근사 + 2배 오버샘플링, ⑦ 최종 렌더링·검증은 torchaudio `lfilter` + 2배 오버샘플링.
+- G는 PyTorch로 직접 구현, 배치 지원. biquad는 RBJ 쿡북. 합성 데이터 생성과 인코더 학습 중엔 주파수 샘플링 방식 FIR 근사, 곡별 파라미터 최적화는 FIR 근사 + 2배 오버샘플링, 증류의 최종 렌더링·검증은 torchaudio `lfilter` + 2배 오버샘플링.
 - 출력 음량은 θ에 넣지 않고 스템 RMS로 정규화.
 - 실행 결과는 `runs/<날짜_곡명>/`에 저장.
 
 ## 코드 구조
 
-설계 문서 9장을 따른다: `ampcap/`(separate, research_llm, session, graybox/{filters,blocks,amp}, synth_data, encoder, stats, optimize, distill, evaluate), `app.py`, `notebooks/`, `tests/`, `runs/`.
+설계 문서 9장을 따른다: `ampcap/`(separate, research_llm, session, graybox/{filters,blocks,amp}, synth_data, encoder, stats, optimize, distill, evaluate, get_data, pipeline), `app.py`, `notebooks/`, `tests/`, `runs/`.
 
 ## 테스트
 
 - 테스트 기준은 설계 문서 7장. `pytest tests/`가 통과해야 작업 완료로 본다.
-- ③ 필터는 scipy(`freqz`, `sosfilt`) 기준 비교와 `gradcheck`(double)로 검증.
-- ⑥ 통계를 만들면 게인/트레블 구분 테스트를 가장 먼저 실행한다.
+- G의 필터는 scipy(`freqz`, `sosfilt`) 기준 비교와 `gradcheck`(double)로 검증.
+- 통계 4종을 만들면 게인/트레블 구분 테스트를 가장 먼저 실행한다.
 
 ## 일정 마감점
 
-- 11/12: 필터 테스트 미통과 시 NablAFx(MIT) 필터 함수를 출처 밝히고 가져온다.
-- 11/14: 음원 → .nam 경로 완성. 미완성이면 이 경로 다듬기를 최우선.
-- 일정이 밀리면 빼는 순서: (a) 후보 화면 → (b) 세션만 경로 → ②-0 LLM 조사 → 실험 1 일부 조건.
-- 끝까지 지키는 것: 음원 → .nam 경로, 실험 1의 시작점·세션 정보 비교, DAW 시연.
+- 11/12 필터 테스트 통과(NablAFx 미사용), 11/14 음원 → .nam 경로 완성.
+- 일정이 밀리면 LLM 장비 조사, 실험 1 일부 조건 순서로 뺀다.
+- 끝까지 지키는 것: 음원 → .nam 경로, 실험 1의 시작점 비교와 세션 정보 조건(없음/정확/오지정) 비교, DAW 시연.
 
 ## 범위 밖
 

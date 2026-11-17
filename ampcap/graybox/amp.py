@@ -144,8 +144,8 @@ class GrayboxAmp(nn.Module):
     forward(x, theta)
       x:     (B, T) 48kHz 모노
       theta: (B, 24) 또는 (24,) ∈ [0,1]
-      mode:  "fft"(학습, 주파수 영역 FIR 근사) / "iir"(lfilter, ⑦ 렌더링·검증)
-      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(⑥ 곡별 파라미터 최적화, ⑦ 최종 렌더링).
+      mode:  "fft"(학습·곡별 파라미터 최적화, 주파수 샘플링 방식 FIR 근사) / "iir"(lfilter, 증류의 최종 렌더링·검증)
+      oversample: True면 2배 샘플레이트에서 전체 체인을 돌린다(곡별 파라미터 최적화, 증류의 최종 렌더링).
       target_rms: 지정하면 출력 RMS를 이 값으로 맞춘다(스템 RMS 정규화). 스칼라 또는 (B,).
       bypass: 건너뛸 블록 이름 집합(시각화·테스트용).
     """
@@ -197,7 +197,7 @@ class GrayboxAmp(nn.Module):
 
     @torch.no_grad()
     def render(self, x: torch.Tensor, theta: torch.Tensor, target_rms=None) -> torch.Tensor:
-        """⑦ 최종 렌더링: lfilter + 2배 오버샘플링."""
+        """최종 렌더링(증류·검증): lfilter + 2배 오버샘플링."""
         return self.forward(x, theta, mode="iir", oversample=True, target_rms=target_rms)
 
     @torch.no_grad()

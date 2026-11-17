@@ -1,6 +1,6 @@
 """설치된 외부 패키지가 우리가 부르는 API를 실제로 갖고 있는지 확인한다(다운로드·학습 없음).
 
-NAM·Demucs·anthropic은 버전마다 이름이 달라서, 맞지 않으면 Colab에서 오래 돌린 뒤에야 터진다.
+NAM·Demucs·anthropic은 버전마다 이름이 달라서, 맞지 않으면 Colab에서 오래 돌린 뒤에야 오류가 난다.
 """
 
 import inspect

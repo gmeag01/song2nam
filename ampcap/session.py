@@ -1,4 +1,4 @@
-"""② 세션 스키마 검증, 대응표, 사전 범위, 세션 벡터.
+"""세션 처리: 세션 스키마 검증, 대응표, 사전 범위, 세션 벡터.
 
 대응표 v2 값은 회로·측정 자료로 다시 검증한 범위다(설계 문서 4.3). 근거가 약한 칸이 남아 있다.
 값이나 사전 범위 규칙을 바꾸면 `MAPPING_VERSION`을 올린다.
@@ -138,7 +138,7 @@ def load_session(path: str | Path) -> dict:
 
 
 # ---------------------------------------------------------------- 대응표
-# 요소 → {θ 이름: (하한, 상한)} (0~1 정규화 값). 실제 단위로 적고 싶으면 _u()를 쓴다.
+# 세션 값 → {θ 이름: (하한, 상한)} (0~1 정규화 값). 실제 단위로 적고 싶으면 _u()를 쓴다.
 
 
 def _u(name: str, lo: float, hi: float) -> tuple[float, float]:
@@ -218,7 +218,7 @@ MAPPING: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
 
 
 # ---------------------------------------------------------------- 사전 범위
-# Prior는 확률분포가 아니라 차원별 [lo, hi]와 중심값이다. ④에서만 이 범위에서 균등하게 뽑는다.
+# Prior는 확률분포가 아니라 차원별 [lo, hi]와 중심값이다. 합성 데이터 생성에서만 이 범위에서 균등하게 뽑는다.
 
 
 @dataclass
@@ -302,7 +302,7 @@ def session_vector(session: dict) -> np.ndarray:
 
 
 def random_session(rng: np.random.Generator, p_unknown: float = 0.0) -> dict:
-    """④ 합성 데이터용 무작위 세션."""
+    """합성 데이터용 무작위 세션."""
     s: dict = {"capture_target": "rhythm", "same_rig": True}
     for path, opts, _ in FIELDS:
         v = "unknown" if rng.random() < p_unknown else str(rng.choice(opts))

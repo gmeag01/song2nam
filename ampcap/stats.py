@@ -1,12 +1,12 @@
-"""⑥ 통계 4종. 모두 크기 기반이고 전체 음량 차이를 제거한다(설계 문서 4.7).
+"""통계 매칭 손실의 통계 4종. 모두 크기 기반이고 전체 음량 차이를 제거한다(설계 문서 4.7).
 
 1. ltas:  장기 평균 스펙트럼 — 연주 프레임 log-Mel 평균 (M,)
 2. level: 레벨별 스펙트럼 — 신호 내 음량 분위수 4구간별 평균 스펙트럼 (4, M)
 3. flat:  레벨 구간별 스펙트럼 평탄도(dB) (4,)
-4. dyn:   다이내믹 — 크레스트 팩터 평균·분산, 프레임 음량 분포 폭 (3,)
+4. dyn:   다이내믹스 통계: 크레스트 팩터 평균·분산, 프레임 음량 분포 폭 (3,)
 
 입력 x는 (..., N, T): 마지막 두 축(클립 N개 × 프레임)을 한 덩어리로 모아 통계를 낸다.
-앞쪽 축(...)은 독립 그룹(예: ⑥의 시작점들)이다.
+앞쪽 축(...)은 독립 그룹(예: 곡별 파라미터 최적화의 시작점들)이다.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ class Stats(nn.Module):
         flat_frame = db.mean(1) - 10 * torch.log10(pw.mean(1))  # (G, P)
         flat = wmean(flat_frame[:, None, :], memb)                    # (G, n_levels)
 
-        # 4. 다이내믹
+        # 4. 다이내믹스 통계
         cm = wmean(cr, w)
         cv = wmean((cr - cm[:, None]).square(), w)
         lm = wmean(ld, w)
@@ -155,7 +155,7 @@ def _feat_dims(k: str) -> int:
 
 def band_diff_db(pred_ltas: torch.Tensor, target_ltas: torch.Tensor, cfg: StatConfig | None = None,
                  edges=(40, 250, 2000, 6000, 16000)) -> dict[str, float]:
-    """장기 평균 스펙트럼의 대역별 dB 차이(예측 − 타깃). 진단·⑨ 그래프용."""
+    """장기 평균 스펙트럼의 대역별 dB 차이(예측 − 타깃). 진단·평가 그래프용."""
     cfg = cfg or StatConfig()
     import numpy as np
 
@@ -172,7 +172,7 @@ def band_diff_db(pred_ltas: torch.Tensor, target_ltas: torch.Tensor, cfg: StatCo
 
 
 def describe_residual(bands: dict[str, float], tol_db: float = 2.0) -> list[str]:
-    """대역 차이를 사람이 읽을 문장으로 (예: '고역 부족 3.1 dB')."""
+    """대역 차이를 사람이 읽을 문장으로 (예: '고역(6000-16000Hz) 부족 3.1 dB')."""
     names = {0: "저역", 1: "중역", 2: "중고역", 3: "고역"}
     msgs = []
     for i, (k, v) in enumerate(bands.items()):

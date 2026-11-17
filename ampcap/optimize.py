@@ -1,4 +1,4 @@
-"""⑥ 곡별 파라미터 최적화(inference-time optimization), 후보 선택.
+"""곡별 파라미터 최적화(inference-time optimization), 후보 선택.
 
 네트워크 가중치는 바꾸지 않고 θ만 곡마다 최적화한다.
 
@@ -9,7 +9,7 @@ L(θ) = Σ wₖ · L1(통계ₖ(G(DI; θ)), 통계ₖ(스템)) / (시작점 손�
      + λ_anchor · Σ_드라이브 ((θ − θ₀) / σ)²        ← 드라이브 앵커(θ₀ = 그 시작점)
 
 θ = sigmoid(u), u를 Adam으로 최적화한다. 시작점 여러 개를 한 배치로 병렬 최적화한다.
-교환 게인(in_gain, boost_level)은 시작점 값에 고정한다(설계 4.7 게인 식별). θ*는 손실이 최소의
+교환 게인(in_gain_db, boost_level_db)은 시작점 값에 고정한다(설계 4.7 게인 식별). θ*는 손실이 최소의
 (1 + select_eps) 안에 드는 시작점 중 시작점에서 가장 덜 움직인 것이다(최소 이동 선택).
 """
 
@@ -36,7 +36,7 @@ class FitConfig:
     weights: dict = field(default_factory=lambda: {k: 1.0 for k in STAT_KEYS})
     lambda_prior: float = 0.1
     lambda_enc: float = 0.05
-    patience: int = 150          # EMA 손실이 이만큼 좋아지지 않으면 종료
+    patience: int = 150          # EMA 손실이 이 스텝 수 동안 좋아지지 않으면 종료
     ema: float = 0.9
     min_delta: float = 1e-3
     eval_clips: int = 16         # 마지막 평가에 쓰는 고정 DI 클립 수
@@ -58,7 +58,7 @@ class FitResult:
     losses: torch.Tensor               # (S,) 고정 클립 평가 손실(시작점 공통 기준으로 정규화)
     start_names: list[str]
     curve: list[list[float]]           # 스텝별 시작점 손실
-    candidates: list[int]              # 서로 다른 상위 결과의 인덱스(손실 순)
+    candidates: list[int]              # θ*(최소 이동 선택)를 맨 앞에 두고 나머지는 손실 순. 서로 다른 상위 결과의 인덱스
     diagnostics: dict
     restarts: int = 0
 
@@ -69,7 +69,7 @@ def _logit(p: torch.Tensor) -> torch.Tensor:
 
 
 # 사이에 선형 블록만 있어 dB 합만 출력에 남는 게인 쌍(앞쪽, 뒤쪽). 뒤쪽이 자유로울 때만 앞쪽을 고정한다.
-# boost=none이면 boost_drive가 고정이라 in_gain이 첫 tanh의 유일한 드라이브가 되므로 풀어 둔다.
+# boost=none이면 boost_drive_db가 고정이라 in_gain_db가 첫 tanh의 유일한 드라이브가 되므로 풀어 둔다.
 EXCHANGEABLE = [("in_gain_db", "boost_drive_db"), ("boost_level_db", "pre1_gain_db")]
 DRIVES = ["boost_drive_db", "pre1_gain_db", "pre2_gain_db", "pa_drive_db"]   # 비선형 4곳의 입력 게인
 
@@ -151,7 +151,7 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
     def losses_for(th, clips, norm=None):
         n = clips.shape[0]
         x = clips[None].expand(S, -1, -1).reshape(S * n, -1)
-        # ⑦ 렌더링(96kHz)과 같은 앨리어싱 조건에서 맞춘다(설계 4.4 구현 결정 5)
+        # 증류의 최종 렌더링(96kHz)과 같은 앨리어싱 조건에서 맞춘다(설계 4.4 구현 결정 5)
         y = G(x, th.repeat_interleave(n, 0), mode="fft", oversample=True).reshape(S, n, -1)
         st = stats(y)
         ls = stat_losses(st, tgt, stat_keys)
@@ -228,7 +228,7 @@ def fit(target_audio: torch.Tensor, di_pool: torch.Tensor, prior: Prior,
         ref = finite.nanmean(0, keepdim=True).nan_to_num(1.0).clamp_min(1e-6)
         total = torch.nan_to_num(combine(th_final, terms, ref), nan=float("inf"))
 
-    # 최소 이동 선택: 손실이 거의 같으면 시작점에서 덜 움직인 쪽(평평한 방향으로 흘러간 θ를 피한다), 같으면 인코더
+    # 최소 이동 선택: 손실이 거의 같으면 시작점에서 덜 움직인 쪽(손실이 변하지 않는 방향으로 흘러간 θ를 피한다), 같으면 인코더
     move = (th_final - th0).square().mean(-1).sqrt()
     lim = total.min() * (1 + cfg.select_eps)
     near = [i for i in range(S) if total[i] <= lim]

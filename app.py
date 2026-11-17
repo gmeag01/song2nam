@@ -1,6 +1,6 @@
 """Gradio 데모 앱 (설계 문서 5장).
 
-화면 흐름(괄호는 모듈 번호): 1. 업로드·분리(①) → 2. 구간 선택(①) → 3. 세션 정보(②) → 4. 톤 찾기(⑥) → 5. .nam 생성(⑦)
+화면 흐름: 업로드·분리 → 구간 선택 → 세션 정보 → 톤 찾기(곡별 파라미터 최적화) → .nam 생성(증류)
 
     python app.py [--share] [--egdb data/EGDB/audio_DI] [--nam-input data/nam/v3_0_0.wav] [--encoder ...]
 
@@ -29,7 +29,7 @@ ARGS = argparse.Namespace(egdb=os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI
                           nam_input=os.environ.get("AMPCAP_NAM_INPUT", "data/nam/v3_0_0.wav"),
                           encoder=os.environ.get("AMPCAP_ENCODER", str(default_encoder_path())), split_file="data/egdb_split.json")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-SCOPE_KO = {"song": "곡 단위 장비", "usual": "평소 장비"}  # ②-0 출처 범위 표시
+SCOPE_KO = {"song": "곡 단위 장비", "usual": "평소 장비"}  # LLM 장비 조사의 scope 표시
 
 
 # ---------------------------------------------------------------- 그림
@@ -139,7 +139,7 @@ def check_segments(target, same_rig, state):
     separate.save_outputs(state["run_dir"], mono, rep)
     msgs = [separate.GUIDANCE[target], f"유효 연주 길이(무음 제외): {rep.active_sec:.1f}초"]
     if rep.message:
-        msgs.append("⛔ " + rep.message)
+        msgs.append("중단: " + rep.message)
     mg = separate.multi_guitar_message(rep.warnings)
     if mg:
         msgs.append(mg)
@@ -162,7 +162,7 @@ def llm_research(link_or_title, state):
         return "제목을 읽지 못했습니다. '아티스트 - 곡명'으로 입력하세요.", *([gr.update()] * 6), state
     draft = rl.research(artist, song)
     if draft is None:
-        return "LLM 조사 실패 — 아래 폼에 직접 입력하세요.", *([gr.update()] * 6), state
+        return "LLM 장비 조사 실패. 아래 폼에 직접 입력하세요.", *([gr.update()] * 6), state
     state["draft"] = draft
     f = draft["fields"]
     lines = [f"{artist} — {song}"]
@@ -198,7 +198,7 @@ def save_session(target, same_rig, pickup, family, gain, cab, boost, model, stat
 
 
 def find_tone(steps, state):
-    """⑥ 톤 찾기. 제너레이터로 손실 곡선을 실시간 표시한다."""
+    """톤 찾기(곡별 파라미터 최적화). 제너레이터로 손실 곡선을 실시간 표시한다."""
     from ampcap.optimize import FitConfig, fit, save_result
 
     if not state.get("ok", False):
@@ -248,7 +248,7 @@ def find_tone(steps, state):
     diag = "\n".join(res.diagnostics["messages"]) or "대역별 잔차 모두 2 dB 미만"
     state["n_candidates"] = len(cands)
     yield (fig_curve(res.curve), fig_theta(res.theta_star), cands[0] if cands else None,
-           cands[1] if len(cands) > 1 else None, f"θ* 손실 {float(res.losses.min()):.4f}\n{diag}", state)
+           cands[1] if len(cands) > 1 else None, f"θ* 손실 {float(res.losses[res.candidates[0]]):.4f}\n{diag}", state)
 
 
 def make_nam(rank, epochs, state):
@@ -261,7 +261,7 @@ def make_nam(rank, epochs, state):
     rd = Path(state["run_dir"])
     n_cand = len(json.loads((rd / "theta_candidates.json").read_text(encoding="utf-8"))["candidates"])
     if not 0 <= rank < max(n_cand, 1):
-        raise gr.Error(f"후보 번호는 0~{max(n_cand, 1) - 1} 사이여야 합니다.")
+        raise gr.Error(f"후보 순위는 0~{max(n_cand, 1) - 1} 사이여야 합니다.")
     theta = load_theta(rd / "theta_candidates.json", None if rank == 0 else rank)
     reader = di_reader_for_split(ARGS.egdb, "test", ARGS.split_file)
     out = distill(theta, rd, ARGS.nam_input, DI_REF_RMS, session=state.get("session"),
@@ -300,7 +300,7 @@ def build():
             load_btn = gr.Button("불러오기")
             load_msg = gr.Textbox(label="결과", lines=6)
 
-        with gr.Tab("1. 업로드·분리 (①)"):
+        with gr.Tab("업로드·분리"):
             audio = gr.Audio(type="filepath", label="음원 파일")
             song_name = gr.Textbox(label="곡 이름(선택)")
             sep_btn = gr.Button("기타 분리 (Demucs htdemucs_6s)")
@@ -309,7 +309,7 @@ def build():
             rec_txt = gr.Textbox(label="추천 구간 [[시작, 끝], ...]")
             sep_msg = gr.Markdown()
 
-        with gr.Tab("2. 구간 선택 (①)"):
+        with gr.Tab("구간 선택"):
             target = gr.Radio(["rhythm", "lead"], value="rhythm", label="capture_target")
             same_rig = gr.Checkbox(True, label="same_rig (모든 기타 트랙이 같은 기타·앰프 구성)")
             with gr.Row():
@@ -325,8 +325,8 @@ def build():
             chk_btn = gr.Button("점검하고 저장")
             chk_msg = gr.Textbox(label="점검 결과", lines=4)
 
-        with gr.Tab("3. 세션 정보 (②)"):
-            link = gr.Textbox(label="곡 링크 또는 '아티스트 - 곡명' (LLM 조사, 선택)")
+        with gr.Tab("세션 정보"):
+            link = gr.Textbox(label="곡 링크 또는 '아티스트 - 곡명' (LLM 장비 조사, 선택)")
             llm_btn = gr.Button("LLM 장비 조사")
             llm_msg = gr.Textbox(label="조사 초안 (출처·확신도)", lines=8)
             with gr.Row():
@@ -341,9 +341,9 @@ def build():
             sess_msg = gr.Markdown()
             prior_fig = gr.Plot(label="사전 범위 중심 θ")
 
-        with gr.Tab("4. 톤 찾기 (⑥)"):
+        with gr.Tab("톤 찾기"):
             steps = gr.Slider(100, 2000, value=800, step=50, label="최적화 스텝")
-            fit_btn = gr.Button("톤 찾기 (⑥)")
+            fit_btn = gr.Button("톤 찾기")
             curve = gr.Plot(label="손실 곡선")
             fit_msg = gr.Textbox(label="진단", lines=4)
             with gr.Row():
@@ -351,10 +351,10 @@ def build():
                 cand_b = gr.Audio(label="후보 B")
             theta_fig = gr.Plot(label="θ: 앰프 노브와 블록별 주파수 응답")
 
-        with gr.Tab("5. .nam 생성 (⑦)"):
-            rank = gr.Number(0, label="후보 번호 (0 = θ*)", precision=0, minimum=0)
+        with gr.Tab(".nam 생성"):
+            rank = gr.Number(0, label="후보 순위 (0 = 후보 A·θ*, 1 = 후보 B)", precision=0, minimum=0)
             epochs = gr.Slider(10, 300, value=100, step=10, label="NAM 학습 epoch")
-            nam_btn = gr.Button(".nam 생성 (⑦)")
+            nam_btn = gr.Button(".nam 생성")
             nam_file = gr.File(label="model.nam")
             nam_msg = gr.Textbox(label="입력 레벨·검증(ESR)", lines=8)
             gr.Markdown("생성된 .nam에는 캐비닛이 포함됩니다. NAM 플러그인의 IR 로더를 끄고, "
