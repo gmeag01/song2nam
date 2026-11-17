@@ -1,10 +1,10 @@
-"""biquad 계수(RBJ), 주파수 영역 필터, lfilter 래퍼.
+"""biquad 계수(RBJ), 주파수 샘플링 방식 필터, lfilter 래퍼.
 
 모든 함수는 배치를 지원한다. 계수 함수는 (B,) 모양의 텐서를 받아
 b, a를 각각 (B, 3)으로 돌려준다(a0 = 1로 정규화).
 
-- 학습 중: `freq_response`로 응답을 구해 곱한 뒤 `fft_filter`로 적용(FIR 근사).
-- ⑦ 최종 렌더링·검증: `lfilter`(torchaudio, 시간 영역).
+- 학습·곡별 파라미터 최적화: `freq_response`로 응답을 구해 곱한 뒤 `fft_filter`로 적용(주파수 샘플링 방식 FIR 근사).
+- 증류의 최종 렌더링·검증: `lfilter`(torchaudio, 시간 영역).
 
 계수 공식은 R. Bristow-Johnson, "Cookbook formulae for audio EQ biquad filter
 coefficients"를 따른다.
@@ -162,7 +162,7 @@ def apply_biquads_lfilter(x: torch.Tensor,
 
 
 def apply_biquads(x: torch.Tensor, coeffs, mode: str = "fft") -> torch.Tensor:
-    """mode: "fft"(학습용 FIR 근사) 또는 "iir"(torchaudio lfilter)."""
+    """mode: "fft"(학습·최적화용 주파수 샘플링 방식 FIR 근사) 또는 "iir"(torchaudio lfilter)."""
     if mode == "fft":
         return apply_biquads_fft(x, coeffs)
     if mode == "iir":

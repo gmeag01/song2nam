@@ -1,4 +1,4 @@
-"""⑨ 평가 지표와 실험.
+"""평가 지표와 실험.
 
 정답이 있는 비교: ESR(주 지표), MR-STFT, Mel L1, θ 오차(실제 단위)
 정답이 없는 비교: 통계별 L1 거리(stat_distance), 장기 평균 스펙트럼 대역별 dB 차이 그래프, mel FAD 대체(fad_mel, VGGish 아님, 참고용),
@@ -83,7 +83,7 @@ def gain_sum_error(theta_pred, theta_true) -> dict[str, float]:
 
 def stat_sensitivity(theta, di: torch.Tensor, G: GrayboxAmp | None = None, stats: Stats | None = None,
                      stat_keys=STAT_KEYS, n_weak: int = 3) -> dict:
-    """⑥ 통계 특징의 θ 민감도 JᵀJ 고유분해(게인 식별 진단). 고유값이 작은 방향은 손실이 보지 못하는 θ 조합이다.
+    """통계 매칭 손실에 쓰는 통계 특징의 θ 민감도 JᵀJ 고유분해(게인 식별 진단). 고유값이 작은 방향은 손실이 보지 못하는 θ 조합이다.
 
     di: (N, T) DI 클립. 통계는 키마다 기준 θ에서의 평균 크기로 나눠 단위를 맞춘다.
     """
@@ -203,7 +203,7 @@ class Exp1Config:
     sessions: list = field(default_factory=lambda: ["none", "correct", "wrong"])
     session_only_baseline: bool = True
     seed: int = 0
-    lambda_anchor: float = 0.1   # ⑥ 드라이브 앵커 세기(0이면 끔). 바꿔 돌릴 때는 결과 폴더를 따로 둔다
+    lambda_anchor: float = 0.1   # 드라이브 앵커 세기(0이면 끔). 바꿔 돌릴 때는 결과 폴더를 따로 둔다
 
 
 # 예전 exp1_results.jsonl의 시작점 이름 → 지금 이름
@@ -329,7 +329,7 @@ def run_experiment1(test_reader, pool_reader, out_dir: str | Path, cfg: Exp1Conf
 
 
 def canonical_bias(theta) -> np.ndarray:
-    """바이어스 기준형(pre1_bias ≥ 0). G(x; −b1, −b2) = −G(−x; b1, b2)이고 ⑥ 통계는 극성 불변이라
+    """바이어스 기준형(pre1_bias ≥ 0). G(x; −b1, −b2) = −G(−x; b1, b2)이고 통계 4종은 극성 불변이라
     두 바이어스를 함께 뒤집은 θ는 구분할 수 없다. θ 거리 지표에만 쓴다."""
     th = np.array(theta, dtype=np.float64).reshape(-1)
     i1, i2 = NAMES.index("pre1_bias"), NAMES.index("pre2_bias")
@@ -356,7 +356,7 @@ def _evaluate_theta(theta, song, G, device) -> dict:
 
 
 def read_results(path: str | Path) -> list[dict]:
-    """exp1_results.jsonl 읽기. 세션이 쓰는 도중 끊겨 깨진 줄은 건너뛴다(그 조합은 다시 돌린다)."""
+    """exp1_results.jsonl 읽기. 기록 도중 실행이 끊겨 깨진 줄은 건너뛴다(그 조합은 다시 돌린다)."""
     path = Path(path)
     if not path.exists():
         return []

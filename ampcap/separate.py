@@ -1,4 +1,4 @@
-"""① 분리, 구간 점검, 추천 구간.
+"""분리와 구간 선택: 기타 분리, 구간 점검, 추천 구간.
 
 1. Demucs `htdemucs_6s`로 스테레오 기타 스템을 얻는다.
 2. 짧은 창마다 좌우 상관도와 Side/Mid 에너지 비로 단일 기타 가능성을 매겨 추천 구간을 낸다(참고용).
@@ -76,7 +76,7 @@ def separate_guitar(audio: np.ndarray, sr: int = SR, device: str | None = None,
                     model_name: str = "htdemucs_6s") -> np.ndarray:
     """스테레오 음원 (2, T) → 스테레오 기타 스템 (2, T), 같은 sr.
 
-    GPU 메모리가 부족하면 세그먼트를 줄여 다시 시도하고, 그래도 안 되면 CPU로 돌린다.
+    GPU에서 실패하면(메모리 부족 등) 세그먼트를 줄여 다시 시도하고, 그래도 안 되면 CPU로 돌린다.
     """
     import torch
     from demucs.apply import apply_model
@@ -282,7 +282,7 @@ def check_and_build(stem: np.ndarray, segments: list[list[float]], sr: int = SR,
     active_sec = len(out) / sr
 
     raw = np.concatenate(raw_pieces, axis=-1)
-    if np.mean(np.abs(raw) >= CLIP_LEVEL) > 1e-4:  # 고른 구간, 채널별
+    if np.mean(np.abs(raw) >= CLIP_LEVEL) > 1e-4:  # 고른 구간의 원본(모노로 합치기 전) 샘플 전체에서
         warnings.append("clipping")
     if stereo is not None:
         rows = stereo_analysis(raw, sr)

@@ -1,4 +1,4 @@
-"""⑦ .nam 증류.
+"""증류: G(θ*)로 .nam 캡처 만들기.
 
 1. θ*를 G에 고정하고 lfilter + 2배 오버샘플링으로 렌더링한다.
 2. NAM 학습 입력 신호 v3.0.0(`input.wav`, 커뮤니티 표기 v3_0_0.wav)을 G에 통과시켜 output.wav를 만든다.
@@ -49,8 +49,8 @@ def render_nam_output(theta: torch.Tensor, nam_input_path: str | Path, out_dir: 
                       G: GrayboxAmp | None = None) -> dict:
     """NAM 학습 입력 신호 → G(θ*) → output.wav. 반환: 입력 레벨 정보.
 
-    di_ref_rms: DI 기준 음량(`DI_REF_RMS`, ④⑥⑦ 공통). NAM 입력을 이 RMS로 맞춰 G에 넣는다.
-    사용자는 DAW에서 DI 트랙을 같은 기준(input_gain_db)으로 맞춘다.
+    di_ref_rms: DI 기준 음량(`DI_REF_RMS`, 합성 데이터·곡별 파라미터 최적화·증류 공통). NAM 입력을 이 RMS로 맞춰 G에 넣는다.
+    사용자는 DAW에서 DI 트랙의 연주 RMS를 di_ref_rms_dbfs에 맞춘다.
     """
     import soundfile as sf
 
@@ -78,7 +78,7 @@ def render_nam_output(theta: torch.Tensor, nam_input_path: str | Path, out_dir: 
         "input_active_rms_dbfs": 20 * math.log10(in_rms),
         "di_ref_rms_dbfs": 20 * math.log10(di_ref_rms),
         "output_gain_db": 20 * math.log10(out_gain),
-        "note": "DI 트랙 연주 RMS를 di_ref_rms_dbfs에 맞추면 ⑥과 같은 드라이브가 된다.",
+        "note": "DI 트랙 연주 RMS를 di_ref_rms_dbfs에 맞추면 톤 찾기 때와 같은 드라이브가 된다.",
     }
     (out_dir / "input_level.json").write_text(json.dumps(level, ensure_ascii=False, indent=2),
                                               encoding="utf-8")
@@ -237,8 +237,8 @@ def distill(theta: torch.Tensor, run_dir: str | Path, nam_input_path: str | Path
                                   level["output_gain_db"], device=dev)
         if not result["verify"]["ok"]:
             result["warning"] = (f"G와 .nam의 ESR {result['verify']['esr_mean']:.4f}이 "
-                                 f"목표 {ESR_TARGET}보다 큽니다. 더 큰 모델(architecture='standard')이나 "
-                                 "더 긴 학습(epochs)으로 다시 학습할 수 있습니다.")
+                                 f"목표 {ESR_TARGET}보다 큽니다. epochs를 늘려 다시 학습하세요. "
+                                 "architecture가 'standard'가 아니면 'standard'로 바꿔 보세요.")
     (run_dir / "distill.json").write_text(json.dumps(result, ensure_ascii=False, indent=2),
                                           encoding="utf-8")
     return result

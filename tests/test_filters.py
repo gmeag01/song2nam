@@ -1,4 +1,4 @@
-"""③ 필터: scipy freqz·sosfilt 기준 비교, gradcheck(double), 주파수 영역 vs lfilter."""
+"""그레이박스 필터: scipy freqz·sosfilt 기준 비교, gradcheck(double), 주파수 샘플링 방식 vs lfilter."""
 
 import numpy as np
 import pytest
@@ -86,7 +86,7 @@ def test_lfilter_matches_scipy_sosfilt(kind, make):
 
 
 def test_fft_filter_matches_lfilter():
-    """주파수 영역 FIR 근사 ≈ 시간 영역 IIR (직렬 5개)."""
+    """주파수 샘플링 방식 FIR 근사 ≈ lfilter IIR (직렬 5개)."""
     d = torch.float64
     co = [m(d) for _, m in CASES]
     x = torch.randn(2, 20000, dtype=d, generator=torch.Generator().manual_seed(1))

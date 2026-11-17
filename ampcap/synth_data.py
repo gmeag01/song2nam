@@ -1,12 +1,13 @@
-"""④ 합성 데이터 생성기와 EGDB DI 분할.
+"""합성 데이터 생성기와 EGDB DI 분할.
 
 샘플 하나의 생성 과정(설계 문서 4.5):
-1. 세션 필드 값을 무작위로 정하고 ②로 사전 범위를 만든다. 약 20%는 θ 전체 범위에서 뽑는다.
+1. 세션 필드 값을 무작위로 정하고 대응표로 사전 범위를 만든다(compute_prior). 약 20%는 θ 전체 범위에서 뽑는다.
 2. 사전 범위 안에서 θ를 균등하게 뽑는다.
 3. 세션에 조건 드롭아웃(unknown 마스킹)과 confidence 증강을 적용한다.
 4. EGDB DI에서 3초를 잘라 DI 레벨을 무작위로 바꾼다(DI 레벨 증강).
 5. y = G(x; θ)를 렌더링한다(GPU).
-6. pedalboard로 무작위 EQ, 컴프, 짧은 리버브 증강을 건다.
+6. 스템 RMS로 정규화하고 믹스 처리 증강(pedalboard로 무작위 EQ, 컴프, 짧은 리버브)을 건다.
+7. 분리 잔여물 근사 증강(augment_separation)을 건다.
 
 데이터는 학습 중 바로 만들고 저장하지 않는다.
 """
@@ -28,7 +29,7 @@ SR = 48000
 CLIP_SEC = 3.0
 SPLITS = ("train", "val", "pool", "test")
 SPLIT_RATIOS = (0.7, 0.1, 0.1, 0.1)
-# DI 기준 음량. ④·⑥·⑦ 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력단 게인 θ in_gain_db의 기준점).
+# DI 기준 음량. 합성 데이터·곡별 파라미터 최적화·증류 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력단 게인 θ in_gain_db의 기준점).
 DI_REF_RMS = 0.05
 
 
@@ -121,7 +122,7 @@ class DIReader:
         return np.stack([self.random_clip(rng) for _ in range(n)])
 
     def fixed_clips(self, n: int, seed: int = 0) -> np.ndarray:
-        """⑥ DI 풀처럼 재현 가능한 클립 n개."""
+        """seed로 고정한 재현 가능한 클립 n개(DI 풀, 증류 검증용 미사용 DI)."""
         return self.batch(n, np.random.default_rng(seed))
 
 
@@ -158,7 +159,7 @@ def augment_mix(y: np.ndarray, rng: np.random.Generator, sr: int = SR) -> np.nda
 
 
 def augment_separation(y: np.ndarray, rng: np.random.Generator, sr: int = SR) -> np.ndarray:
-    """분리 잔여물 근사 증강: 무작위 고역 감쇠(LP)와 배경 노이즈. ④ 학습에서만 쓴다.
+    """분리 잔여물 근사 증강: 무작위 고역 감쇠(LP)와 배경 노이즈. 인코더 학습용 합성 데이터에서만 쓴다.
     shortcut: 실제 분리 잔여물(다른 악기 블리드, 마스킹 왜곡)은 흉내 내지 않는다. Demucs 검증 세트로 차이가 보이면 넣는다."""
     out = y.astype(np.float32)
     if rng.random() < 0.5:

@@ -2,7 +2,7 @@
 
     python -m ampcap.get_data [--data data]
 
-두 파일 모두 재배포하지 않고 공식 Google Drive에서 직접 받는다. 이미 받은 파일은 건너뛴다.
+두 데이터 모두 재배포하지 않고 공식 Google Drive에서 직접 받는다. 이미 받은 파일은 건너뛴다.
 """
 
 from __future__ import annotations

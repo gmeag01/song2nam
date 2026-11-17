@@ -126,7 +126,7 @@ def power_amp(x, p, sr, mode):
 
 
 def cabinet(x, p, sr, mode):
-    """하이패스 → 피킹(공진) → 로우패스 → 피킹(음수 게인, 딥)."""
+    """하이패스 → 피킹(공진) → 로우패스 2개 직렬(4차) → 피킹(음수 게인, 딥)."""
     return F.apply_biquads(x, _cab_coeffs(p, sr), mode)
 
 

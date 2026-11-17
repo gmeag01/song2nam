@@ -1,4 +1,4 @@
-"""② 세션: 전부 unknown이면 전체 범위, 겹침·충돌 계산, 잘못된 값 거부, 세션 벡터."""
+"""세션 처리: 전부 unknown이면 전체 범위, 겹침·충돌 계산, 잘못된 값 거부, 세션 벡터."""
 
 import numpy as np
 import pytest
