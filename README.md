@@ -2,14 +2,14 @@
 
 상업 음원 하나와 기타 세션 정보만으로 [Neural Amp Modeler](https://neural-amp-modeler.readthedocs.io)에서 바로 쓸 수 있는 `.nam` 캡처를 만드는 프로젝트입니다.
 
-일반 NAM 캡처는 DI와 앰프 출력을 맞춘 페어 데이터로 학습합니다. 이 프로젝트는 DI 없이 음원의 기타 스템 통계와 세션 정보로 미분 가능한 그레이박스 앰프 G의 파라미터 θ를 찾고, 그 앰프로 NAM 학습 입력 신호(NAM 문서의 `input.wav`, v3.0.0)를 리앰핑해 `.nam`을 증류합니다.
+일반 NAM 캡처는 DI와 앰프 출력을 맞춘 페어 데이터로 학습합니다. 이 프로젝트는 DI 없이 음원의 기타 스템 통계와 세션 정보로 미분 가능한 그레이박스 앰프 G의 파라미터 θ를 찾고, 그 앰프로 NAM 학습 입력 신호(NAM 문서의 `input.wav`, v3.0.0)를 리앰핑해 NAM을 학습해 `.nam`을 만듭니다.
 
 자세한 설계와 용어(12장 용어집)는 [docs/2026-11-09-ampcap-design.md](docs/2026-11-09-ampcap-design.md)를 보세요.
 
 ## 파이프라인
 
 ```
-음원 → 분리·구간 선택 → 세션 처리 → 인코더 θ̂ → 곡별 파라미터 최적화 θ* → .nam 증류
+음원 → 분리·구간 선택 → 세션 처리 → 인코더 θ̂ → 곡별 파라미터 최적화 θ* → NAM 학습(.nam)
 ```
 
 ## 구조
@@ -70,7 +70,7 @@ python app.py
 
 | 노트북 | 내용 |
 |---|---|
-| `00_setup_and_tests.ipynb` | 설치, `pytest tests/`, 증류 ESR 테스트, EGDB 분할, 대응표 대표 설정 청취 |
+| `00_setup_and_tests.ipynb` | 설치, `pytest tests/`, NAM 학습 ESR 테스트, EGDB 분할, 대응표 대표 설정 청취 |
 | `01_train_encoder.ipynb` | 합성 데이터로 인코더 학습 (체크포인트 이어 학습) |
 | `02_song_to_nam.ipynb` | 음원 → .nam (폼으로 세션 정보 입력, 데이터 내려받기 포함) |
 | `03_experiment1.ipynb` | 실험 1 (파라미터 복원 실험) |

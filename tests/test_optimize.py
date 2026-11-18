@@ -52,7 +52,7 @@ def test_recovers_theta_from_same_di():
     di = _di_clips()
     theta_true = theta_from_units({"pre1_gain_db": 26.0, "ts_treble_db": 6.0, "ts_bass_db": -5.0,
                                    "pre2_gain_db": 6.0, "in_gain_db": 0.0})
-    with torch.no_grad():   # 타깃은 증류와 같은 렌더링(lfilter + 2배 오버샘플링)
+    with torch.no_grad():   # 타깃은 NAM 학습과 같은 렌더링(lfilter + 2배 오버샘플링)
         stem = G.render(di, theta_true.expand(len(di), -1)).reshape(-1)
     prior = _prior_fixing_all_but(theta_true, FREE)
 

@@ -1,6 +1,6 @@
-"""증류·평가·합성 데이터.
+"""NAM 학습·평가·합성 데이터.
 
-증류 ESR 테스트(미사용 DI로 G와 .nam 비교, 목표 0.01 미만)는 NAM 학습이 필요해서
+NAM 학습 ESR 테스트(미사용 DI로 G와 .nam 비교, 목표 0.01 미만)는 실제 학습이 필요해서
 AMPCAP_NAM_INPUT(NAM 학습 입력 신호 wav 경로)이 있을 때만 돈다(Colab 노트북 00).
 """
 
@@ -100,7 +100,7 @@ EGDB_DI = os.environ.get("AMPCAP_EGDB", "data/EGDB/audio_DI")
 
 @pytest.mark.skipif(not os.environ.get("AMPCAP_NAM_INPUT"), reason="NAM 학습 입력 신호 파일 필요(Colab)")
 def test_distill_esr_on_unused_di(tmp_path):
-    """설계 4.5: 증류 검증용 DI는 EGDB test 분할(미사용 DI). 백색 잡음은 기타 DI와 분포가 달라 ESR이 3배쯤 나쁘게 나온다."""
+    """설계 4.5: NAM 학습 검증용 DI는 EGDB test 분할(미사용 DI). 백색 잡음은 기타 DI와 분포가 달라 ESR이 3배쯤 나쁘게 나온다."""
     from ampcap.distill import distill
     from ampcap.synth_data import di_reader_for_split, normalize_di
 
