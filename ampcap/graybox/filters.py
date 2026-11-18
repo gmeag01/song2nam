@@ -4,7 +4,7 @@
 b, a를 각각 (B, 3)으로 돌려준다(a0 = 1로 정규화).
 
 - 학습·곡별 파라미터 최적화: `freq_response`로 응답을 구해 곱한 뒤 `fft_filter`로 적용(주파수 샘플링 방식 FIR 근사).
-- 증류의 최종 렌더링·검증: `lfilter`(torchaudio, 시간 영역).
+- NAM 학습의 최종 렌더링·검증: `lfilter`(torchaudio, 시간 영역).
 
 계수 공식은 R. Bristow-Johnson, "Cookbook formulae for audio EQ biquad filter
 coefficients"를 따른다.

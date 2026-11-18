@@ -1,4 +1,4 @@
-"""증류: G(θ*)로 .nam 캡처 만들기.
+"""NAM 학습: G(θ*)로 .nam 캡처 만들기.
 
 1. θ*를 G에 고정하고 lfilter + 2배 오버샘플링으로 렌더링한다.
 2. NAM 학습 입력 신호 v3.0.0(`input.wav`, 커뮤니티 표기 v3_0_0.wav)을 G에 통과시켜 output.wav를 만든다.
@@ -49,7 +49,7 @@ def render_nam_output(theta: torch.Tensor, nam_input_path: str | Path, out_dir: 
                       G: GrayboxAmp | None = None) -> dict:
     """NAM 학습 입력 신호 → G(θ*) → output.wav. 반환: 입력 레벨 정보.
 
-    di_ref_rms: DI 기준 음량(`DI_REF_RMS`, 합성 데이터·곡별 파라미터 최적화·증류 공통). NAM 입력을 이 RMS로 맞춰 G에 넣는다.
+    di_ref_rms: DI 기준 음량(`DI_REF_RMS`, 합성 데이터·곡별 파라미터 최적화·NAM 학습 공통). NAM 입력을 이 RMS로 맞춰 G에 넣는다.
     사용자는 DAW에서 DI 트랙의 연주 RMS를 di_ref_rms_dbfs에 맞춘다.
     """
     import soundfile as sf

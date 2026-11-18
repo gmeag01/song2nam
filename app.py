@@ -1,6 +1,6 @@
 """Gradio 데모 앱 (설계 문서 5장).
 
-화면 흐름: 업로드·분리 → 구간 선택 → 세션 정보 → 톤 찾기(곡별 파라미터 최적화) → .nam 생성(증류)
+화면 흐름: 업로드·분리 → 구간 선택 → 세션 정보 → 톤 찾기(곡별 파라미터 최적화) → .nam 생성(NAM 학습)
 
     python app.py [--share] [--egdb data/EGDB/audio_DI] [--nam-input data/nam/v3_0_0.wav] [--encoder ...]
 

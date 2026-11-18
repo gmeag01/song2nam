@@ -136,7 +136,7 @@ def test_block_responses_for_visualization():
 
 
 def test_fit_render_matches_final_render_high_gain():
-    """곡별 파라미터 최적화 렌더(FFT 필터 + 2배 오버샘플링)와 증류 렌더(lfilter + 2배 오버샘플링)가 같은 소리를 낸다."""
+    """곡별 파라미터 최적화 렌더(FFT 필터 + 2배 오버샘플링)와 NAM 학습용 렌더(lfilter + 2배 오버샘플링)가 같은 소리를 낸다."""
     G = GrayboxAmp()
     x = _tone(T=3 * SR, amp=0.05, f=110.0, dtype=torch.float32)
     th = theta_from_units({"pre1_gain_db": 36.0, "pre2_gain_db": 30.0, "boost_drive_db": 20.0,

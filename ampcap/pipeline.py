@@ -133,7 +133,7 @@ def main(argv=None):
     out = distill(theta, run_dir, a.nam_input, DI_REF_RMS, session=session,
                   name=f"{session.get('artist') or ''} {session.get('song') or song}".strip(),
                   epochs=a.epochs, architecture=a.architecture, verify_di=verify_di, device=device)
-    print("증류:", json.dumps(out, ensure_ascii=False, indent=1))
+    print("NAM 학습:", json.dumps(out, ensure_ascii=False, indent=1))
 
 
 if __name__ == "__main__":

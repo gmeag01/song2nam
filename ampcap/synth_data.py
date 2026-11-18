@@ -29,7 +29,7 @@ SR = 48000
 CLIP_SEC = 3.0
 SPLITS = ("train", "val", "pool", "test")
 SPLIT_RATIOS = (0.7, 0.1, 0.1, 0.1)
-# DI 기준 음량. 합성 데이터·곡별 파라미터 최적화·증류 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력단 게인 θ in_gain_db의 기준점).
+# DI 기준 음량. 합성 데이터·곡별 파라미터 최적화·NAM 학습 모두 DI 클립을 이 RMS로 맞춰 G에 넣는다(입력단 게인 θ in_gain_db의 기준점).
 DI_REF_RMS = 0.05
 
 
@@ -122,7 +122,7 @@ class DIReader:
         return np.stack([self.random_clip(rng) for _ in range(n)])
 
     def fixed_clips(self, n: int, seed: int = 0) -> np.ndarray:
-        """seed로 고정한 재현 가능한 클립 n개(DI 풀, 증류 검증용 미사용 DI)."""
+        """seed로 고정한 재현 가능한 클립 n개(DI 풀, NAM 학습 검증용 미사용 DI)."""
         return self.batch(n, np.random.default_rng(seed))
 
 
