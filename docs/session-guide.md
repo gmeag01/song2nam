@@ -126,10 +126,10 @@
 | 값 | 뜻 | 바뀌는 것 |
 |---|---|---|
 | `none` | 페달 없이 앰프만 | 부스트 드라이브·미드를 0으로 고정 |
-| `tube_screamer` | Ibanez Tube Screamer, Maxon OD808, Klon 계열 등 미드를 올리는 오버드라이브 | 미드 600 ~ 1000 Hz를 8 ~ 12 dB 올림, 드라이브 6 ~ 30 dB |
+| `tube_screamer` | Tube Screamer 계열 오버드라이브(Ibanez TS808·TS9, Maxon OD808 등). 클리핑 앞에서 미드를 크게 올리고 저역을 줄임 | 미드 600 ~ 1000 Hz를 8 ~ 12 dB 올림, 드라이브 6 ~ 30 dB |
 | `unknown` | 모름 | 제한 없음 (0 ~ 30 dB) |
 
-퍼즈, 디스토션 페달(Big Muff, RAT 등)은 G가 다루지 않습니다. 이런 곡은 `unknown`으로 두세요.
+부스트 블록은 Tube Screamer 계열을 기준으로 만들었습니다. Klon, OCD처럼 성격이 다른 오버드라이브와 퍼즈, 디스토션 페달(Big Muff, RAT 등)은 `tube_screamer`로 고르지 말고 `unknown`으로 두세요. `unknown`이면 부스트 범위가 열려 있어 음원에 맞는 값을 찾습니다.
 
 ### 확신도 (`confidence`)
 
