@@ -639,8 +639,6 @@ checkpoints/         인코더 체크포인트 (최종 _best만 커밋)
 - NAM 학습 코드의 ESR 등급(`_esr_comment`). https://github.com/sdatkinson/neural-amp-modeler/blob/main/nam/train/core.py
 - Positive Grid BIAS X (Music-to-Tone). https://www.positivegrid.com/products/bias-x
 - HT-Demucs. Rouard, Massa, Défossez. Hybrid Transformers for Music Source Separation. ICASSP 2023. (facebookresearch/demucs 저장소는 2025-01 아카이브)
-- Gao 외. PoLyScriber: Integrated Fine-tuning of Extractor and Lyrics Transcriber for Polyphonic Music. 2022. https://arxiv.org/abs/2207.07336
-- FAT-HuBERT: Front-end Adaptive Training of Hidden-unit BERT for Distortion-Invariant Robust Speech Recognition. 2023. https://arxiv.org/abs/2311.17790
 - torchaudio `lfilter` 문서. https://docs.pytorch.org/audio/stable/generated/torchaudio.functional.lfilter.html
 
 ## 12. 용어집
