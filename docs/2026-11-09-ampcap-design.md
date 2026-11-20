@@ -61,7 +61,7 @@
 - 추가 자동 점검 항목(구간 사이 톤 일치, 피킹 세기 분포)
 - 공개 캡처를 검색해 시작점으로 쓰는 비교 기준
 - GAN 기반 비페어 학습, 조건부 신경망 앰프
-- 재분리 증강 (반주와 섞은 뒤 Demucs로 다시 분리)
+- 분리 스템 학습(separation-aware training): 합성 렌더를 반주와 섞어 Demucs로 다시 분리한 뒤 인코더를 학습해, 분리기(전단)와 인코더(후단) 사이의 train-test mismatch를 줄인다. 정해진 표준 용어는 없고, 가장 가까운 선례는 PoLyScriber의 pre-and-fine(분리 보컬로 채보기 미세조정)과 음성 분야의 Front-end Adaptive Training이다. 대신 실험 1에서 정답 스템과 Demucs 재분리 스템의 차이를 측정한다
 - IR 라이브러리 기반 캐비닛
 
 ## 3. 전체 구조
@@ -158,7 +158,7 @@
 | `amp.gain` | low / mid / high / unknown | 프리앰프 게인 범위 |
 | `amp.model` | 자유 텍스트 | 기록용. 알려진 모델명은 family로 변환 |
 | `cab.size` | 1x12 / 2x12 / 4x12 / unknown | 캐비닛 블록 |
-| `boost` | none / tube_screamer / unknown | 부스트 블록 (none이면 드라이브 0 고정). tube_screamer는 Tube Screamer·Klon 계열처럼 미드를 올리는 오버드라이브. 예전 값 `ts`도 읽는다 |
+| `boost` | none / tube_screamer / unknown | 부스트 블록 (none이면 드라이브 0 고정). tube_screamer는 Tube Screamer 계열(TS808·TS9·OD808 등) 오버드라이브. Klon·OCD 등 다른 오버드라이브는 unknown. 예전 값 `ts`도 읽는다 |
 | `confidence` | 필드별 0 ~ 1, 기본 1.0 | 범위를 좁히는 정도 |
 
 **대응표**: 세션 값별로 θ의 어느 차원을 어느 범위로 좁히는지 적은 표.
@@ -639,6 +639,8 @@ checkpoints/         인코더 체크포인트 (최종 _best만 커밋)
 - NAM 학습 코드의 ESR 등급(`_esr_comment`). https://github.com/sdatkinson/neural-amp-modeler/blob/main/nam/train/core.py
 - Positive Grid BIAS X (Music-to-Tone). https://www.positivegrid.com/products/bias-x
 - HT-Demucs. Rouard, Massa, Défossez. Hybrid Transformers for Music Source Separation. ICASSP 2023. (facebookresearch/demucs 저장소는 2025-01 아카이브)
+- Gao 외. PoLyScriber: Integrated Fine-tuning of Extractor and Lyrics Transcriber for Polyphonic Music. 2022. https://arxiv.org/abs/2207.07336
+- FAT-HuBERT: Front-end Adaptive Training of Hidden-unit BERT for Distortion-Invariant Robust Speech Recognition. 2023. https://arxiv.org/abs/2311.17790
 - torchaudio `lfilter` 문서. https://docs.pytorch.org/audio/stable/generated/torchaudio.functional.lfilter.html
 
 ## 12. 용어집
@@ -672,7 +674,7 @@ checkpoints/         인코더 체크포인트 (최종 _best만 커밋)
 | 입력단 게인 | θ의 입력단 게인 | input gain | `in_gain_db` |
 | DI 레벨 증강 | 합성 데이터 생성에서 DI 음량을 무작위로 바꾸는 범위 | input level augmentation | `SynthConfig.di_gain_range_db` |
 | 입력 레벨 | NAM 학습에서 NAM 입력을 DI 기준 음량에 맞춘 디지털 배율(dBu 아님) | input level | `input_gain_db`, `input_level.json` |
-| 부스트(오버드라이브) | 부스트 블록. 값 `tube_screamer` = Tube Screamer·Klon 계열처럼 미드를 올리는 오버드라이브 | boost / overdrive | `boost_*`, 블록 `booster` |
+| 부스트(오버드라이브) | 부스트 블록. 값 `tube_screamer` = Tube Screamer 계열 오버드라이브(클리핑 앞 미드 부스트) | boost / overdrive | `boost_*`, 블록 `booster` |
 | 톤스택 | 저역·미드·고역 EQ 블록. `ts_` 접두사는 톤스택만 뜻한다 | tone stack | `ts_*` |
 | 클리핑 비대칭(DC 바이어스) | 프리앰프 단마다 tanh 앞에 더하는 DC 바이어스 | asymmetric clipping (offset / DC bias), Comunità 외 2025 §3.2.2 | `pre1_bias`, `pre2_bias` |
 | 딥 | 캐비닛의 음수 게인 피킹 컷(엄밀한 notch 아님) | peaking cut | `cab_notch_hz`, `cab_notch_db` |
