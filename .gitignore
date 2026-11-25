@@ -7,6 +7,14 @@ venv/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# 기타 문서들
+figures
+reports
+research_notes
+study
+scripts
+
+
 # 데이터셋 (EGDB 등) — 저장소에 올리지 않음
 data/*
 !data/.gitkeep
